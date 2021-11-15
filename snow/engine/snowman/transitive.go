@@ -129,6 +129,7 @@ func (t *Transitive) finishBootstrapping() error {
 	}
 
 	t.Ctx.Log.Info("bootstrapping finished with %s as the last accepted block", lastAcceptedID)
+	t.metrics.bootstrapFinished.Set(1)
 	return nil
 }
 
@@ -185,6 +186,7 @@ func (t *Transitive) GetAncestors(vdr ids.ShortID, requestID uint32, blkID ids.I
 		return nil
 	}
 
+	t.metrics.getAncestorsBlks.Observe(float64(len(ancestorsBytes)))
 	t.Sender.SendMultiPut(vdr, requestID, ancestorsBytes)
 	return nil
 }
@@ -205,7 +207,7 @@ func (t *Transitive) Put(vdr ids.ShortID, requestID uint32, blkID ids.ID, blkByt
 	blk, err := t.VM.ParseBlock(blkBytes)
 	if err != nil {
 		t.Ctx.Log.Debug("failed to parse block %s: %s", blkID, err)
-		t.Ctx.Log.Verbo("block:\n%s", formatting.DumpBytes{Bytes: blkBytes})
+		t.Ctx.Log.Verbo("block:\n%s", formatting.DumpBytes(blkBytes))
 		// because GetFailed doesn't utilize the assumption that we actually
 		// sent a Get message, we can safely call GetFailed here to potentially
 		// abandon the request.
@@ -291,7 +293,7 @@ func (t *Transitive) PushQuery(vdr ids.ShortID, requestID uint32, blkID ids.ID, 
 	// If parsing fails, we just drop the request, as we didn't ask for it
 	if err != nil {
 		t.Ctx.Log.Debug("failed to parse block %s: %s", blkID, err)
-		t.Ctx.Log.Verbo("block:\n%s", formatting.DumpBytes{Bytes: blkBytes})
+		t.Ctx.Log.Verbo("block:\n%s", formatting.DumpBytes(blkBytes))
 		return nil
 	}
 

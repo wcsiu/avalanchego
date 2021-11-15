@@ -100,6 +100,7 @@ func (t *Transitive) finishBootstrapping() error {
 	}
 
 	t.Ctx.Log.Info("bootstrapping finished with %d vertices in the accepted frontier", len(frontier))
+	t.metrics.bootstrapFinished.Set(1)
 	return t.Consensus.Initialize(t.Ctx, t.Params, frontier)
 }
 
@@ -210,7 +211,7 @@ func (t *Transitive) Put(vdr ids.ShortID, requestID uint32, vtxID ids.ID, vtxByt
 	vtx, err := t.Manager.ParseVtx(vtxBytes)
 	if err != nil {
 		t.Ctx.Log.Debug("failed to parse vertex %s due to: %s", vtxID, err)
-		t.Ctx.Log.Verbo("vertex:\n%s", formatting.DumpBytes{Bytes: vtxBytes})
+		t.Ctx.Log.Verbo("vertex:\n%s", formatting.DumpBytes(vtxBytes))
 		return t.GetFailed(vdr, requestID)
 	}
 	if _, err := t.issueFrom(vdr, vtx); err != nil {
@@ -295,7 +296,7 @@ func (t *Transitive) PushQuery(vdr ids.ShortID, requestID uint32, vtxID ids.ID, 
 	vtx, err := t.Manager.ParseVtx(vtxBytes)
 	if err != nil {
 		t.Ctx.Log.Debug("failed to parse vertex %s due to: %s", vtxID, err)
-		t.Ctx.Log.Verbo("vertex:\n%s", formatting.DumpBytes{Bytes: vtxBytes})
+		t.Ctx.Log.Verbo("vertex:\n%s", formatting.DumpBytes(vtxBytes))
 		return nil
 	}
 
@@ -512,7 +513,11 @@ func (t *Transitive) issue(vtx avalanche.Vertex) error {
 	}
 
 	for _, tx := range txs {
-		for _, dep := range tx.Dependencies() {
+		deps, err := tx.Dependencies()
+		if err != nil {
+			return err
+		}
+		for _, dep := range deps {
 			depID := dep.ID()
 			if !txIDs.Contains(depID) && !t.Consensus.TxIssued(dep) {
 				// This transaction hasn't been issued yet. Add it as a dependency.
@@ -652,7 +657,7 @@ func (t *Transitive) issueBatch(txs []snowstorm.Tx) error {
 		parentIDs[i] = virtuousIDs[int(index)]
 	}
 
-	vtx, err := t.Manager.BuildVtx(0, parentIDs, txs, nil)
+	vtx, err := t.Manager.BuildVtx(parentIDs, txs)
 	if err != nil {
 		t.Ctx.Log.Warn("error building new vertex with %d parents and %d transactions",
 			len(parentIDs), len(txs))

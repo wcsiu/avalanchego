@@ -132,6 +132,9 @@ type peer struct {
 
 	// trackedSubnets hold subnetIDs that this peer is interested in.
 	trackedSubnets ids.Set
+
+	// observedUptime is the uptime of this node in peer's point of view
+	observedUptime uint8
 }
 
 // newPeer returns a properly initialized *peer.
@@ -288,12 +291,12 @@ func (p *peer) ReadMessages() {
 			return
 		}
 
-		p.net.log.Verbo("parsing message from %s%s at %s:\n%s", constants.NodeIDPrefix, p.nodeID, p.getIP(), formatting.DumpBytes{Bytes: msgBytes})
+		p.net.log.Verbo("parsing message from %s%s at %s:\n%s", constants.NodeIDPrefix, p.nodeID, p.getIP(), formatting.DumpBytes(msgBytes))
 
 		// Parse the message
 		msg, err := p.net.mc.Parse(msgBytes, p.nodeID, onFinishedHandling)
 		if err != nil {
-			p.net.log.Verbo("failed to parse message from %s%s at %s:\n%s\n%s", constants.NodeIDPrefix, p.nodeID, p.getIP(), formatting.DumpBytes{Bytes: msgBytes}, err)
+			p.net.log.Verbo("failed to parse message from %s%s at %s:\n%s\n%s", constants.NodeIDPrefix, p.nodeID, p.getIP(), formatting.DumpBytes(msgBytes), err)
 			// Couldn't parse the message. Read the next one.
 			onFinishedHandling()
 			p.net.metrics.failedToParse.Inc()
@@ -333,7 +336,7 @@ func (p *peer) WriteMessages() {
 
 		msgLen := uint32(len(msg.Bytes()))
 		p.net.outboundMsgThrottler.Release(uint64(msgLen), p.nodeID)
-		p.net.log.Verbo("sending message to %s%s at %s:\n%s", constants.NodeIDPrefix, p.nodeID, p.getIP(), formatting.DumpBytes{Bytes: msg.Bytes()})
+		p.net.log.Verbo("sending message to %s%s at %s:\n%s", constants.NodeIDPrefix, p.nodeID, p.getIP(), formatting.DumpBytes(msg.Bytes()))
 		msgb := [wrappers.IntLen]byte{}
 		binary.BigEndian.PutUint32(msgb[:], msgLen)
 		for _, byteSlice := range [2][]byte{msgb[:], msg.Bytes()} {
@@ -431,6 +434,10 @@ func (p *peer) handle(msg message.InboundMessage, msgLen float64) {
 		return
 	case message.Pong:
 		p.handlePong(msg)
+		msg.OnFinishedHandling()
+		return
+	case message.UptimePong:
+		p.handleUptimePong(msg)
 		msg.OnFinishedHandling()
 		return
 	case message.GetPeerList:
@@ -563,6 +570,22 @@ func (p *peer) sendPing() {
 // assumes the [stateLock] is not held
 func (p *peer) sendPong() {
 	msg, err := p.net.mc.Pong()
+	p.net.log.AssertNoError(err)
+
+	p.net.send(msg, false, []*peer{p})
+}
+
+// assumes the [stateLock] is not held
+func (p *peer) sendUptimePong() {
+	uptimePercent, err := p.net.config.UptimeCalculator.CalculateUptimePercent(p.nodeID)
+	if err != nil {
+		uptimePercent = 0
+	}
+	// let's round down and send percentage (0-100) instead of float
+	// with this way we can pack it into a single byte
+	flooredPercentage := math.Floor(uptimePercent * 100)
+	percentage := uint8(flooredPercentage)
+	msg, err := p.net.mc.UptimePong(percentage)
 	p.net.log.AssertNoError(err)
 
 	p.net.send(msg, false, []*peer{p})
@@ -801,10 +824,21 @@ func (p *peer) handlePeerList(msg message.InboundMessage) {
 // assumes the [stateLock] is not held
 func (p *peer) handlePing(_ message.InboundMessage) {
 	p.sendPong()
+	p.sendUptimePong()
 }
 
 // assumes the [stateLock] is not held
-func (p *peer) handlePong(_ message.InboundMessage) {
+func (p *peer) handlePong(msg message.InboundMessage) {
+	p.pongHandle(msg, false)
+}
+
+// assumes the [stateLock] is not held
+func (p *peer) handleUptimePong(msg message.InboundMessage) {
+	p.pongHandle(msg, true)
+}
+
+// assumes the [stateLock] is not held
+func (p *peer) pongHandle(msg message.InboundMessage, isUptime bool) {
 	if !p.net.shouldHoldConnection(p.nodeID) {
 		p.net.log.Debug("disconnecting from peer %s%s at %s because the peer is not a validator", constants.NodeIDPrefix, p.nodeID, p.getIP())
 		p.discardIP()
@@ -820,6 +854,12 @@ func (p *peer) handlePong(_ message.InboundMessage) {
 	if err := p.net.versionCompatibility.Compatible(peerVersion); err != nil {
 		p.net.log.Debug("disconnecting from peer %s%s at %s version (%s) not compatible: %s", constants.NodeIDPrefix, p.nodeID, p.getIP(), peerVersion, err)
 		p.discardIP()
+	}
+	if isUptime {
+		uptime := msg.Get(message.Uptime).(uint8)
+		if uptime <= 100 {
+			p.observedUptime = uptime // [0, 100] percentage
+		}
 	}
 }
 
