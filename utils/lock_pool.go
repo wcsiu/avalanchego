@@ -5,13 +5,13 @@ package utils
 
 import "sync"
 
-type basicLock struct {
+type BasicLock struct {
 	free bool
 	Lock sync.Mutex
 }
 
 type LockPool struct {
-	pool     []*basicLock
+	pool     []*BasicLock
 	signalCh chan struct{}
 	closeCh  chan struct{}
 }
@@ -19,16 +19,16 @@ type LockPool struct {
 func NewLockPool(size int) *LockPool {
 	lPool := new(LockPool)
 	// use a better data structure ?
-	var pool []*basicLock = make([]*basicLock, size)
+	pool := make([]*BasicLock, size)
 	for i := 0; i < len(pool); i++ {
-		pool[i] = &basicLock{free: true}
+		pool[i] = &BasicLock{free: true}
 	}
 	lPool.pool = pool
 	lPool.signalCh = make(chan struct{}, size)
 	return lPool
 }
 
-func (l *LockPool) GetFreeLock() (*basicLock, int, bool) {
+func (l *LockPool) GetFreeLock() (*BasicLock, int, bool) {
 	for i, lock := range l.pool {
 		if lock.free {
 			lock.free = false
@@ -56,7 +56,7 @@ func (l *LockPool) CloseCh() {
 	l.closeCh <- struct{}{}
 }
 
-func (l *LockPool) WaitForSignal() (*basicLock, int, bool) {
+func (l *LockPool) WaitForSignal() (*BasicLock, int, bool) {
 	for {
 		select {
 		case <-l.closeCh:
