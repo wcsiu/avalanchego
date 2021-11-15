@@ -24,6 +24,8 @@ import (
 
 var errDuplicatedContainerID = errors.New("inbound message contains duplicated container ID")
 
+const defaultLocksPoolSize = 17
+
 // Handler passes incoming messages from the network to the consensus engine.
 // (Actually, it receives the incoming messages from a ChainRouter, but same difference.)
 type Handler struct {
@@ -50,6 +52,8 @@ type Handler struct {
 	// [unprocessedMsgsCond.L] must be held while accessing [unprocessedMsgs].
 	unprocessedMsgs unprocessedMsgs
 	closing         utils.AtomicBool
+	// Lock pools for throttling consensus messages
+	appRequestLocks *utils.LockPool
 }
 
 // Initialize this consensus handler
@@ -76,6 +80,7 @@ func (h *Handler) Initialize(
 	h.cpuTracker = tracker.NewCPUTracker(uptime.IntervalFactory{}, defaultCPUInterval)
 	var err error
 	h.unprocessedMsgs, err = newUnprocessedMsgs(h.ctx.Log, h.validators, h.cpuTracker, metricsNamespace, metricsRegisterer)
+	h.appRequestLocks = utils.NewLockPool(defaultLocksPoolSize)
 	return err
 }
 
@@ -352,14 +357,39 @@ func (h *Handler) handleConsensusMsg(msg message.InboundMessage) error {
 		return h.engine.Disconnected(nodeID)
 
 	case message.AppRequest:
-		reqID := msg.Get(message.RequestID).(uint32)
-		appBytes, ok := msg.Get(message.AppBytes).([]byte)
-		if !ok {
-			h.ctx.Log.Debug("Malformed message %s from (%s, %s, %d) dropped. Error: could not parse AppBytes",
-				msg.Op(), nodeID, h.engine.Context().ChainID, reqID)
-			return nil
+		appRequestFunc := func() error {
+			reqID := msg.Get(message.RequestID).(uint32)
+			appBytes, ok := msg.Get(message.AppBytes).([]byte)
+			if !ok {
+				h.ctx.Log.Debug("Malformed message %s from (%s, %s, %d) dropped. Error: could not parse AppBytes",
+					msg.Op(), nodeID, h.engine.Context().ChainID, reqID)
+				return nil
+			}
+			return h.engine.AppRequest(nodeID, reqID, msg.ExpirationTime(), appBytes)
 		}
-		return h.engine.AppRequest(nodeID, reqID, msg.ExpirationTime(), appBytes)
+
+		// Get lock from pool
+		lock, idx, ok := h.appRequestLocks.GetFreeLock()
+		if !ok {
+			// if lock doesnt exist, wait for lock
+			lock, idx, ok := h.appRequestLocks.WaitForSignal()
+			if !ok {
+				// if there is no lock, return
+				// this shouldnt happen
+				return nil
+			}
+			lock.Lock.Lock()
+			// [Free] unlocks the lock and sends a signal to the channel
+			defer h.appRequestLocks.Free(idx)
+
+			return appRequestFunc()
+		}
+
+		lock.Lock.Lock()
+		// [Free] unlocks the lock and sends a signal to the channel
+		defer h.appRequestLocks.Free(idx)
+
+		return appRequestFunc()
 
 	case message.AppRequestFailed:
 		reqID := msg.Get(message.RequestID).(uint32)

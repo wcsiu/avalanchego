@@ -16,6 +16,7 @@ import (
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/snow/engine/common"
 	"github.com/ava-labs/avalanchego/snow/validators"
+	"github.com/ava-labs/avalanchego/utils"
 )
 
 func TestHandlerDropsTimedOutMessages(t *testing.T) {
@@ -180,6 +181,59 @@ func TestHandlerDropsGossipDuringBootstrapping(t *testing.T) {
 		t.Fatalf("Handler shutdown timed out before calling toClose")
 	case <-closed:
 	}
+}
+
+func TestAppRequestsThrottling(t *testing.T) {
+	engine := common.EngineTest{T: t}
+	engine.Default(true)
+	engine.ContextF = snow.DefaultContextTest
+	called := make(chan struct{})
+
+	engine.AppRequestF = func(nodeID ids.ShortID, requestID uint32, msg []byte) error {
+		called <- struct{}{}
+		return nil
+	}
+
+	handler := &Handler{}
+	vdrs := validators.NewSet()
+	vdr0 := ids.GenerateTestShortID()
+	err := vdrs.AddWeight(vdr0, 1)
+	assert.NoError(t, err)
+	metrics := prometheus.NewRegistry()
+	mc, err := message.NewCreator(metrics, true /*compressionEnabled*/, "dummyNamespace")
+	assert.NoError(t, err)
+	err = handler.Initialize(
+		mc,
+		&engine,
+		vdrs,
+		nil,
+		"",
+		metrics,
+	)
+	assert.NoError(t, err)
+	handler.appRequestLocks = utils.NewLockPool(3)
+	nodeID := ids.ShortEmpty
+	reqID := uint32(1)
+	deadline := time.Nanosecond
+	chainID := ids.ID{}
+	for _, v := range [][]byte{[]byte("aaa"), []byte("bbb"), []byte("ccc"), []byte("ddd")} {
+		msg := mc.InboundAppRequest(chainID, reqID, deadline, v, nodeID)
+		handler.Push(msg)
+	}
+
+	go handler.Dispatch()
+
+	ticker := time.NewTicker(100000000 * time.Second)
+	defer ticker.Stop()
+	select {
+	case <-ticker.C:
+		l, i, ok := handler.appRequestLocks.GetFreeLock()
+		assert.Equal(t, ok, false)
+		assert.Equal(t, i, 0)
+		assert.Equal(t, l, nil)
+	case <-called:
+	}
+
 }
 
 // Test that messages from the VM are handled
