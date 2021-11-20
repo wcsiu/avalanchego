@@ -42,6 +42,7 @@ import (
 	"github.com/ava-labs/avalanchego/utils/storage"
 	"github.com/ava-labs/avalanchego/utils/timer"
 	"github.com/ava-labs/avalanchego/utils/ulimit"
+	"github.com/ava-labs/avalanchego/vms"
 )
 
 const (
@@ -628,18 +629,19 @@ func getDatabaseConfig(v *viper.Viper, networkID uint32) (node.DatabaseConfig, e
 	}, nil
 }
 
-func getVMAliases(v *viper.Viper) (map[ids.ID][]string, error) {
+func getVMManager(v *viper.Viper) (vms.Manager, error) {
 	aliasFilePath := filepath.Clean(v.GetString(VMAliasesFileKey))
 	exists, err := storage.FileExists(aliasFilePath)
 	if err != nil {
 		return nil, err
 	}
 
+	manager := vms.NewManager()
 	if !exists {
 		if v.IsSet(VMAliasesFileKey) {
 			return nil, fmt.Errorf("vm alias file does not exist in %v", aliasFilePath)
 		}
-		return nil, nil
+		return manager, nil
 	}
 
 	fileBytes, err := ioutil.ReadFile(aliasFilePath)
@@ -651,7 +653,15 @@ func getVMAliases(v *viper.Viper) (map[ids.ID][]string, error) {
 	if err := json.Unmarshal(fileBytes, &vmAliasMap); err != nil {
 		return nil, fmt.Errorf("problem unmarshaling vmAliases: %w", err)
 	}
-	return vmAliasMap, nil
+
+	for vmID, aliases := range vmAliasMap {
+		for _, alias := range aliases {
+			if err := manager.Alias(vmID, alias); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return manager, nil
 }
 
 // getPathFromDirKey reads flag value from viper instance and then checks the folder existence
@@ -942,7 +952,7 @@ func GetNodeConfig(v *viper.Viper, buildDir string) (node.Config, error) {
 	}
 
 	// VM Aliases
-	nodeConfig.VMAliases, err = getVMAliases(v)
+	nodeConfig.VMManager, err = getVMManager(v)
 	if err != nil {
 		return node.Config{}, err
 	}
