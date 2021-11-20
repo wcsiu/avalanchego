@@ -629,19 +629,18 @@ func getDatabaseConfig(v *viper.Viper, networkID uint32) (node.DatabaseConfig, e
 	}, nil
 }
 
-func getVMManager(v *viper.Viper) (vms.Manager, error) {
+func getVMAliases(v *viper.Viper) (map[ids.ID][]string, error) {
 	aliasFilePath := filepath.Clean(v.GetString(VMAliasesFileKey))
 	exists, err := storage.FileExists(aliasFilePath)
 	if err != nil {
 		return nil, err
 	}
 
-	manager := vms.NewManager()
 	if !exists {
 		if v.IsSet(VMAliasesFileKey) {
 			return nil, fmt.Errorf("vm alias file does not exist in %v", aliasFilePath)
 		}
-		return manager, nil
+		return nil, nil
 	}
 
 	fileBytes, err := ioutil.ReadFile(aliasFilePath)
@@ -653,8 +652,17 @@ func getVMManager(v *viper.Viper) (vms.Manager, error) {
 	if err := json.Unmarshal(fileBytes, &vmAliasMap); err != nil {
 		return nil, fmt.Errorf("problem unmarshaling vmAliases: %w", err)
 	}
+	return vmAliasMap, nil
+}
 
-	for vmID, aliases := range vmAliasMap {
+func getVMManager(v *viper.Viper) (vms.Manager, error) {
+	vmAliases, err := getVMAliases(v)
+	if err != nil {
+		return nil, err
+	}
+
+	manager := vms.NewManager()
+	for vmID, aliases := range vmAliases {
 		for _, alias := range aliases {
 			if err := manager.Alias(vmID, alias); err != nil {
 				return nil, err
