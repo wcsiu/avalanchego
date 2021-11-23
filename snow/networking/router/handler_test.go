@@ -233,7 +233,6 @@ func TestAppRequestsThrottling(t *testing.T) {
 		assert.Equal(t, l, nil)
 	case <-called:
 	}
-
 }
 
 // Test that messages from the VM are handled
