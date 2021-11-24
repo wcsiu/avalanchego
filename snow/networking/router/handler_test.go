@@ -184,6 +184,7 @@ func TestHandlerDropsGossipDuringBootstrapping(t *testing.T) {
 }
 
 func TestAppRequestsThrottling(t *testing.T) {
+	pastTime := time.Now()
 	engine := common.EngineTest{T: t}
 	engine.Default(true)
 	engine.ContextF = snow.DefaultContextTest
@@ -221,18 +222,21 @@ func TestAppRequestsThrottling(t *testing.T) {
 		handler.Push(msg)
 	}
 
+	handler.clock.Set(pastTime)
+
 	go handler.Dispatch()
 
-	ticker := time.NewTicker(100000000 * time.Second)
+	ticker := time.NewTicker(1000000 * time.Hour)
 	defer ticker.Stop()
-	select {
-	case <-ticker.C:
-		l, i, ok := handler.appRequestLocks.GetFreeLock()
-		assert.Equal(t, ok, false)
-		assert.Equal(t, i, 0)
-		assert.Equal(t, l, nil)
-	case <-called:
-	}
+
+	<-ticker.C
+	l, i, ok := handler.appRequestLocks.GetFreeLock()
+	assert.Equal(t, ok, false)
+	assert.Equal(t, i, 0)
+	assert.Equal(t, l, nil)
+	// case <-called:
+	// 	fmt.Println("done ????")
+
 }
 
 // Test that messages from the VM are handled
