@@ -368,13 +368,6 @@ func (h *Handler) handleConsensusMsg(msg message.InboundMessage) error {
 		}
 
 		appRequestFunc := func() {
-			if !handleAsync {
-				if err := appFunc(); err != nil {
-					h.ctx.Log.Debug("AppRequest failed with err: %s", err)
-				}
-				return
-			}
-
 			// Get lock from pool
 			lock, idx, ok := h.appRequestLocks.GetFreeLock()
 			if !ok {
