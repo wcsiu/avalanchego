@@ -353,7 +353,9 @@ func (h *Handler) handleConsensusMsg(msg message.InboundMessage) error {
 		return h.engine.Disconnected(nodeID)
 
 	case message.AppRequest:
-		appRequestFunc := func() error {
+		handleAsync := msg.Op().HandleAsync()
+
+		appFunc := func() error {
 			reqID := msg.Get(message.RequestID).(uint32)
 			appBytes, ok := msg.Get(message.AppBytes).([]byte)
 			if !ok {
@@ -364,28 +366,39 @@ func (h *Handler) handleConsensusMsg(msg message.InboundMessage) error {
 			return h.engine.AppRequest(nodeID, reqID, msg.ExpirationTime(), appBytes)
 		}
 
-		// Get lock from pool
-		lock, idx, ok := h.appRequestLocks.GetFreeLock()
-		if !ok {
-			// if lock doesnt exist, wait for lock
-			lock, idx, ok := h.appRequestLocks.WaitForSignal()
-			if !ok {
-				// if there is no lock, return
-				// this shouldnt happen
-				return nil
+		appRequestFunc := func() error {
+			if !handleAsync {
+				return appFunc()
 			}
+
+			// Get lock from pool
+			lock, idx, ok := h.appRequestLocks.GetFreeLock()
+			if !ok {
+				// if lock doesnt exist, wait for lock
+				lock, idx, ok := h.appRequestLocks.WaitForSignal()
+				if !ok {
+					// if there is no lock, return
+					// this shouldnt happen
+					return nil
+				}
+				lock.Lock.Lock()
+				// [Free] unlocks the lock and sends a signal to the channel
+				defer h.appRequestLocks.Free(idx)
+				return appFunc()
+			}
+
 			lock.Lock.Lock()
 			// [Free] unlocks the lock and sends a signal to the channel
 			defer h.appRequestLocks.Free(idx)
+			return appFunc()
+		}
 
+		if !handleAsync {
 			return appRequestFunc()
 		}
 
-		lock.Lock.Lock()
-		// [Free] unlocks the lock and sends a signal to the channel
-		defer h.appRequestLocks.Free(idx)
-
-		return appRequestFunc()
+		go appRequestFunc()
+		return nil
 
 	case message.AppRequestFailed:
 		reqID := msg.Get(message.RequestID).(uint32)

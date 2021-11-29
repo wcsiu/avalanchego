@@ -185,6 +185,15 @@ func (op Op) Compressable() bool {
 	}
 }
 
+func (op Op) HandleAsync() bool {
+	switch op {
+	case AppRequest:
+		return true
+	default:
+		return false
+	}
+}
+
 func (op Op) String() string {
 	switch op {
 	case GetVersion:

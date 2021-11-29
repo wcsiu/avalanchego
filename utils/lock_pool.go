@@ -49,7 +49,10 @@ func (l *LockPool) Free(index int) {
 	lock := l.pool[index]
 	lock.free = true
 	lock.Lock.Unlock()
-	l.signalCh <- struct{}{}
+	// dont signal if the buffer is full
+	if len(l.signalCh) != cap(l.signalCh) {
+		l.signalCh <- struct{}{}
+	}
 }
 
 func (l *LockPool) CloseCh() {

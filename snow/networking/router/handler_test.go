@@ -188,10 +188,13 @@ func TestAppRequestsThrottling(t *testing.T) {
 	engine := common.EngineTest{T: t}
 	engine.Default(true)
 	engine.ContextF = snow.DefaultContextTest
-	called := make(chan struct{})
+
+	handledMessages := 0
 
 	engine.AppRequestF = func(nodeID ids.ShortID, requestID uint32, msg []byte) error {
-		called <- struct{}{}
+		// sleep for 7 seconds so the lock can be held for this period of time
+		time.Sleep(7 * time.Second)
+		handledMessages++
 		return nil
 	}
 
@@ -226,17 +229,35 @@ func TestAppRequestsThrottling(t *testing.T) {
 
 	go handler.Dispatch()
 
-	ticker := time.NewTicker(1000000 * time.Hour)
+	// check after 3 seconds to get new lock
+	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 
 	<-ticker.C
-	l, i, ok := handler.appRequestLocks.GetFreeLock()
+	_, i, ok := handler.appRequestLocks.GetFreeLock()
+	// no free lock should exist
 	assert.Equal(t, ok, false)
 	assert.Equal(t, i, 0)
-	assert.Equal(t, l, nil)
-	// case <-called:
-	// 	fmt.Println("done ????")
+	assert.Equal(t, handledMessages, 0)
+	// check afer another 7 seconds
+	ticker = time.NewTicker(7 * time.Second)
+	defer ticker.Stop()
 
+	<-ticker.C
+	_, _, ok = handler.appRequestLocks.GetFreeLock()
+	// A free lock should exist
+	assert.Equal(t, ok, true)
+	// 3 messages should have been handled
+	assert.Equal(t, handledMessages, 3)
+
+	ticker = time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	<-ticker.C
+	_, _, ok = handler.appRequestLocks.GetFreeLock()
+	assert.Equal(t, ok, true)
+	// the 4th message should have been handled
+	assert.Equal(t, handledMessages, 4)
 }
 
 // Test that messages from the VM are handled
