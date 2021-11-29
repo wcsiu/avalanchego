@@ -7,12 +7,11 @@
 package pluginproto
 
 import (
-	reflect "reflect"
-	sync "sync"
-
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
+	reflect "reflect"
+	sync "sync"
 )
 
 const (
@@ -109,14 +108,11 @@ func file_plugin_proto_rawDescGZIP() []byte {
 	return file_plugin_proto_rawDescData
 }
 
-var (
-	file_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
-	file_plugin_proto_goTypes  = []interface{}{
-		(*ExitCodeResponse)(nil), // 0: pluginproto.ExitCodeResponse
-		(*emptypb.Empty)(nil),    // 1: google.protobuf.Empty
-	}
-)
-
+var file_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_plugin_proto_goTypes = []interface{}{
+	(*ExitCodeResponse)(nil), // 0: pluginproto.ExitCodeResponse
+	(*emptypb.Empty)(nil),    // 1: google.protobuf.Empty
+}
 var file_plugin_proto_depIdxs = []int32{
 	1, // 0: pluginproto.Node.Start:input_type -> google.protobuf.Empty
 	1, // 1: pluginproto.Node.ExitCode:input_type -> google.protobuf.Empty

@@ -7,11 +7,10 @@
 package galiasreaderproto
 
 import (
-	reflect "reflect"
-	sync "sync"
-
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	reflect "reflect"
+	sync "sync"
 )
 
 const (
@@ -205,15 +204,12 @@ func file_galiasreader_proto_rawDescGZIP() []byte {
 	return file_galiasreader_proto_rawDescData
 }
 
-var (
-	file_galiasreader_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
-	file_galiasreader_proto_goTypes  = []interface{}{
-		(*ID)(nil),        // 0: galiasreaderproto.ID
-		(*Alias)(nil),     // 1: galiasreaderproto.Alias
-		(*AliasList)(nil), // 2: galiasreaderproto.AliasList
-	}
-)
-
+var file_galiasreader_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_galiasreader_proto_goTypes = []interface{}{
+	(*ID)(nil),        // 0: galiasreaderproto.ID
+	(*Alias)(nil),     // 1: galiasreaderproto.Alias
+	(*AliasList)(nil), // 2: galiasreaderproto.AliasList
+}
 var file_galiasreader_proto_depIdxs = []int32{
 	1, // 0: galiasreaderproto.AliasReader.Lookup:input_type -> galiasreaderproto.Alias
 	0, // 1: galiasreaderproto.AliasReader.PrimaryAlias:input_type -> galiasreaderproto.ID

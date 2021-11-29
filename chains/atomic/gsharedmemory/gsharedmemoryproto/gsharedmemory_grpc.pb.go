@@ -4,7 +4,6 @@ package gsharedmemoryproto
 
 import (
 	context "context"
-
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -70,16 +69,15 @@ type SharedMemoryServer interface {
 }
 
 // UnimplementedSharedMemoryServer must be embedded to have forward compatible implementations.
-type UnimplementedSharedMemoryServer struct{}
+type UnimplementedSharedMemoryServer struct {
+}
 
 func (UnimplementedSharedMemoryServer) Get(context.Context, *GetRequest) (*GetResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Get not implemented")
 }
-
 func (UnimplementedSharedMemoryServer) Indexed(context.Context, *IndexedRequest) (*IndexedResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Indexed not implemented")
 }
-
 func (UnimplementedSharedMemoryServer) Apply(context.Context, *ApplyRequest) (*ApplyResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Apply not implemented")
 }

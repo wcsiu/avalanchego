@@ -135,7 +135,6 @@ func (h *Handler) Dispatch() {
 
 		// If this message's deadline has passed, don't process it.
 		if expirationTime := msg.ExpirationTime(); !expirationTime.IsZero() && h.clock.Time().After(expirationTime) {
-			fmt.Println("expiration time", expirationTime, "is zero", !expirationTime.IsZero(), "clock time", h.clock.Time(), "clock time after", h.clock.Time().After(expirationTime))
 			nodeID := msg.NodeID()
 			h.ctx.Log.Verbo("Dropping message from %s%s due to timeout. msg: %s",
 				constants.NodeIDPrefix, nodeID, msg)

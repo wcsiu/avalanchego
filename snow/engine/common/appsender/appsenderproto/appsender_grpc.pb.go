@@ -4,7 +4,6 @@ package appsenderproto
 
 import (
 	context "context"
-
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -82,20 +81,18 @@ type AppSenderServer interface {
 }
 
 // UnimplementedAppSenderServer must be embedded to have forward compatible implementations.
-type UnimplementedAppSenderServer struct{}
+type UnimplementedAppSenderServer struct {
+}
 
 func (UnimplementedAppSenderServer) SendAppRequest(context.Context, *SendAppRequestMsg) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendAppRequest not implemented")
 }
-
 func (UnimplementedAppSenderServer) SendAppResponse(context.Context, *SendAppResponseMsg) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendAppResponse not implemented")
 }
-
 func (UnimplementedAppSenderServer) SendAppGossip(context.Context, *SendAppGossipMsg) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendAppGossip not implemented")
 }
-
 func (UnimplementedAppSenderServer) SendAppGossipSpecific(context.Context, *SendAppGossipSpecificMsg) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendAppGossipSpecific not implemented")
 }
