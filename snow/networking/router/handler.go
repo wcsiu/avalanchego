@@ -22,7 +22,7 @@ import (
 
 var errDuplicatedContainerID = errors.New("inbound message contains duplicated container ID")
 
-const defaultLocksPoolSize = 17
+const defaultThreadPoolSize = 17
 
 // Handler passes incoming messages from the network to the consensus engine.
 // (Actually, it receives the incoming messages from a ChainRouter, but same difference.)
@@ -51,7 +51,7 @@ type Handler struct {
 	unprocessedMsgs unprocessedMsgs
 	closing         utils.AtomicBool
 	// Lock pools for throttling consensus messages
-	appRequestLocks *utils.LockPool
+	appRequestPool *utils.ThreadPool
 }
 
 // Initialize this consensus handler
@@ -75,7 +75,7 @@ func (h *Handler) Initialize(
 	h.unprocessedMsgsCond = sync.NewCond(&lock)
 	h.cpuTracker = tracker.NewCPUTracker(uptime.IntervalFactory{}, defaultCPUInterval)
 	var err error
-	h.appRequestLocks = utils.NewLockPool(defaultLocksPoolSize)
+	h.appRequestPool = utils.NewThreadPool(defaultThreadPoolSize)
 	h.unprocessedMsgs, err = newUnprocessedMsgs(h.ctx.Log, h.validators, h.cpuTracker, "handler", h.ctx.Registerer)
 	return err
 }
@@ -201,7 +201,8 @@ func (h *Handler) handleMsg(msg message.InboundMessage) error {
 
 	endTime := h.clock.Time()
 	// If the message was caused by another node, track their CPU time.
-	if op != message.Notify && op != message.GossipRequest && op != message.Timeout {
+	// Include AppRequests as we will use the thread pool time
+	if op != message.Notify && op != message.GossipRequest && op != message.Timeout && op != message.AppRequest {
 		nodeID := msg.NodeID()
 		h.cpuTracker.UtilizeTime(nodeID, startTime, endTime)
 	}
@@ -351,7 +352,7 @@ func (h *Handler) handleConsensusMsg(msg message.InboundMessage) error {
 		// determine if consensus message should be handled with go routines
 		handleAsync := msg.Op().HandleAsync()
 
-		appFunc := func() error {
+		appRequestFunc := func() error {
 			reqID := msg.Get(message.RequestID).(uint32)
 			appBytes, ok := msg.Get(message.AppBytes).([]byte)
 			if !ok {
@@ -362,39 +363,19 @@ func (h *Handler) handleConsensusMsg(msg message.InboundMessage) error {
 			return h.engine.AppRequest(nodeID, reqID, msg.ExpirationTime(), appBytes)
 		}
 
-		appRequestFunc := func() {
-			// Get lock from pool
-			lock, idx, ok := h.appRequestLocks.GetFreeLock()
-			if !ok {
-				// if lock doesnt exist, wait for lock
-				lock, idx, ok := h.appRequestLocks.WaitForSignal()
-				if !ok {
-					// if there is no lock, return
-					// this shouldnt happen
-					return
-				}
-				lock.Lock.Lock()
-				// [Free] unlocks the lock and sends a signal to the channel
-				defer h.appRequestLocks.Free(idx)
-				if err := appFunc(); err != nil {
-					h.ctx.Log.Debug("AppRequest failed with err: %s", err)
-				}
-				return
-			}
-
-			lock.Lock.Lock()
-			// [Free] unlocks the lock and sends a signal to the channel
-			defer h.appRequestLocks.Free(idx)
-			if err := appFunc(); err != nil {
-				h.ctx.Log.Debug("AppRequest failed with err: %s", err)
-			}
-		}
-
 		if !handleAsync {
-			return appFunc()
+			return appRequestFunc()
 		}
 
-		go appRequestFunc()
+		// Send message to thread pool
+		if startTime, endTime, err := h.appRequestPool.SendMessage(appRequestFunc); err != nil {
+			return err
+		} else {
+			// track time
+			h.cpuTracker.UtilizeTime(msg.NodeID(), startTime, endTime)
+
+		}
+
 		return nil
 
 	case message.AppRequestFailed:
