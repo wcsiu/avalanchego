@@ -7,13 +7,7 @@
 package vmproto
 
 import (
-<<<<<<< HEAD
-	reflect "reflect"
-	sync "sync"
-
 	_go "github.com/prometheus/client_model/go"
-=======
->>>>>>> parent of 21bca023a (chore: fix linting)
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
@@ -2070,11 +2064,7 @@ func file_vm_proto_rawDescGZIP() []byte {
 	return file_vm_proto_rawDescData
 }
 
-<<<<<<< HEAD
 var file_vm_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
-=======
-var file_vm_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
->>>>>>> parent of 21bca023a (chore: fix linting)
 var file_vm_proto_goTypes = []interface{}{
 	(*InitializeRequest)(nil),            // 0: vmproto.InitializeRequest
 	(*InitializeResponse)(nil),           // 1: vmproto.InitializeResponse
@@ -2104,13 +2094,9 @@ var file_vm_proto_goTypes = []interface{}{
 	(*GetAncestorsResponse)(nil),         // 25: vmproto.GetAncestorsResponse
 	(*BatchedParseBlockRequest)(nil),     // 26: vmproto.BatchedParseBlockRequest
 	(*BatchedParseBlockResponse)(nil),    // 27: vmproto.BatchedParseBlockResponse
-<<<<<<< HEAD
 	(*GatherResponse)(nil),               // 28: vmproto.GatherResponse
 	(*_go.MetricFamily)(nil),             // 29: io.prometheus.client.MetricFamily
 	(*emptypb.Empty)(nil),                // 30: google.protobuf.Empty
-=======
-	(*emptypb.Empty)(nil),                // 28: google.protobuf.Empty
->>>>>>> parent of 21bca023a (chore: fix linting)
 }
 var file_vm_proto_depIdxs = []int32{
 	2,  // 0: vmproto.InitializeRequest.dbServers:type_name -> vmproto.VersionedDBServer

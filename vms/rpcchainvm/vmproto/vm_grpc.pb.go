@@ -358,12 +358,9 @@ func (UnimplementedVMServer) AppResponse(context.Context, *AppResponseMsg) (*emp
 func (UnimplementedVMServer) AppGossip(context.Context, *AppGossipMsg) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AppGossip not implemented")
 }
-<<<<<<< HEAD
 func (UnimplementedVMServer) Gather(context.Context, *emptypb.Empty) (*GatherResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Gather not implemented")
 }
-=======
->>>>>>> parent of 21bca023a (chore: fix linting)
 func (UnimplementedVMServer) BlockVerify(context.Context, *BlockVerifyRequest) (*BlockVerifyResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method BlockVerify not implemented")
 }
