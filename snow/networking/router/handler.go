@@ -353,6 +353,7 @@ func (h *Handler) handleConsensusMsg(msg message.InboundMessage) error {
 		return h.engine.Disconnected(nodeID)
 
 	case message.AppRequest:
+		// determine if consensus message should be handled with go routines
 		handleAsync := msg.Op().HandleAsync()
 
 		appFunc := func() error {
@@ -366,9 +367,12 @@ func (h *Handler) handleConsensusMsg(msg message.InboundMessage) error {
 			return h.engine.AppRequest(nodeID, reqID, msg.ExpirationTime(), appBytes)
 		}
 
-		appRequestFunc := func() error {
+		appRequestFunc := func() {
 			if !handleAsync {
-				return appFunc()
+				if err := appFunc(); err != nil {
+					h.ctx.Log.Debug("AppRequest failed with err: %s", err)
+				}
+				return
 			}
 
 			// Get lock from pool
@@ -379,22 +383,27 @@ func (h *Handler) handleConsensusMsg(msg message.InboundMessage) error {
 				if !ok {
 					// if there is no lock, return
 					// this shouldnt happen
-					return nil
+					return
 				}
 				lock.Lock.Lock()
 				// [Free] unlocks the lock and sends a signal to the channel
 				defer h.appRequestLocks.Free(idx)
-				return appFunc()
+				if err := appFunc(); err != nil {
+					h.ctx.Log.Debug("AppRequest failed with err: %s", err)
+				}
+				return
 			}
 
 			lock.Lock.Lock()
 			// [Free] unlocks the lock and sends a signal to the channel
 			defer h.appRequestLocks.Free(idx)
-			return appFunc()
+			if err := appFunc(); err != nil {
+				h.ctx.Log.Debug("AppRequest failed with err: %s", err)
+			}
 		}
 
 		if !handleAsync {
-			return appRequestFunc()
+			return appFunc()
 		}
 
 		go appRequestFunc()
