@@ -7,11 +7,12 @@
 package appsenderproto
 
 import (
+	reflect "reflect"
+	sync "sync"
+
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
-	reflect "reflect"
-	sync "sync"
 )
 
 const (
@@ -326,14 +327,17 @@ func file_appsender_proto_rawDescGZIP() []byte {
 	return file_appsender_proto_rawDescData
 }
 
-var file_appsender_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
-var file_appsender_proto_goTypes = []interface{}{
-	(*SendAppRequestMsg)(nil),        // 0: appsenderproto.SendAppRequestMsg
-	(*SendAppResponseMsg)(nil),       // 1: appsenderproto.SendAppResponseMsg
-	(*SendAppGossipMsg)(nil),         // 2: appsenderproto.SendAppGossipMsg
-	(*SendAppGossipSpecificMsg)(nil), // 3: appsenderproto.SendAppGossipSpecificMsg
-	(*emptypb.Empty)(nil),            // 4: google.protobuf.Empty
-}
+var (
+	file_appsender_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+	file_appsender_proto_goTypes  = []interface{}{
+		(*SendAppRequestMsg)(nil),        // 0: appsenderproto.SendAppRequestMsg
+		(*SendAppResponseMsg)(nil),       // 1: appsenderproto.SendAppResponseMsg
+		(*SendAppGossipMsg)(nil),         // 2: appsenderproto.SendAppGossipMsg
+		(*SendAppGossipSpecificMsg)(nil), // 3: appsenderproto.SendAppGossipSpecificMsg
+		(*emptypb.Empty)(nil),            // 4: google.protobuf.Empty
+	}
+)
+
 var file_appsender_proto_depIdxs = []int32{
 	0, // 0: appsenderproto.AppSender.SendAppRequest:input_type -> appsenderproto.SendAppRequestMsg
 	1, // 1: appsenderproto.AppSender.SendAppResponse:input_type -> appsenderproto.SendAppResponseMsg

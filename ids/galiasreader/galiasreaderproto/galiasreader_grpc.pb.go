@@ -4,6 +4,7 @@ package galiasreaderproto
 
 import (
 	context "context"
+
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -69,15 +70,16 @@ type AliasReaderServer interface {
 }
 
 // UnimplementedAliasReaderServer must be embedded to have forward compatible implementations.
-type UnimplementedAliasReaderServer struct {
-}
+type UnimplementedAliasReaderServer struct{}
 
 func (UnimplementedAliasReaderServer) Lookup(context.Context, *Alias) (*ID, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Lookup not implemented")
 }
+
 func (UnimplementedAliasReaderServer) PrimaryAlias(context.Context, *ID) (*Alias, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PrimaryAlias not implemented")
 }
+
 func (UnimplementedAliasReaderServer) Aliases(context.Context, *ID) (*AliasList, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Aliases not implemented")
 }
