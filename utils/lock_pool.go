@@ -11,6 +11,7 @@ type BasicLock struct {
 }
 
 type LockPool struct {
+	sync.Mutex
 	pool     []*BasicLock
 	signalCh chan struct{}
 	closeCh  chan struct{}
@@ -29,6 +30,8 @@ func NewLockPool(size int) *LockPool {
 }
 
 func (l *LockPool) GetFreeLock() (*BasicLock, int, bool) {
+	l.Lock()
+	defer l.Unlock()
 	for i, lock := range l.pool {
 		if lock.free {
 			lock.free = false
@@ -43,6 +46,8 @@ func (l *LockPool) Len() int {
 }
 
 func (l *LockPool) Free(index int) {
+	l.Lock()
+	defer l.Unlock()
 	if index < 0 || index >= l.Len() {
 		return
 	}

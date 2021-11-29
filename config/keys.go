@@ -1,4 +1,4 @@
-// (c) 2019-2020, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package config
@@ -140,5 +140,6 @@ const (
 	OutboundThrottlerAtLargeAllocSizeKey        = "throttler-outbound-at-large-alloc-size"
 	OutboundThrottlerVdrAllocSizeKey            = "throttler-outbound-validator-alloc-size"
 	OutboundThrottlerNodeMaxAtLargeBytesKey     = "throttler-outbound-node-max-at-large-bytes"
+	UptimeMetricFreqKey                         = "uptime-metric-freq"
 	VMAliasesFileKey                            = "vm-aliases-file"
 )

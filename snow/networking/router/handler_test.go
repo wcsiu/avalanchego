@@ -1,4 +1,4 @@
-// (c) 2019-2020, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package router
@@ -22,7 +22,7 @@ import (
 func TestHandlerDropsTimedOutMessages(t *testing.T) {
 	engine := common.EngineTest{T: t}
 	engine.Default(true)
-	engine.ContextF = snow.DefaultContextTest
+	engine.ContextF = snow.DefaultConsensusContextTest
 	called := make(chan struct{})
 
 	engine.GetAcceptedFrontierF = func(nodeID ids.ShortID, requestID uint32) error {
@@ -48,8 +48,6 @@ func TestHandlerDropsTimedOutMessages(t *testing.T) {
 		&engine,
 		vdrs,
 		nil,
-		"",
-		metrics,
 	)
 	assert.NoError(t, err)
 
@@ -89,7 +87,7 @@ func TestHandlerClosesOnError(t *testing.T) {
 
 	closed := make(chan struct{}, 1)
 
-	engine.ContextF = snow.DefaultContextTest
+	engine.ContextF = snow.DefaultConsensusContextTest
 	engine.GetAcceptedFrontierF = func(nodeID ids.ShortID, requestID uint32) error {
 		return errors.New("Engine error should cause handler to close")
 	}
@@ -106,8 +104,6 @@ func TestHandlerClosesOnError(t *testing.T) {
 		&engine,
 		vdrs,
 		nil,
-		"",
-		metrics,
 	)
 	assert.NoError(t, err)
 
@@ -140,7 +136,7 @@ func TestHandlerDropsGossipDuringBootstrapping(t *testing.T) {
 
 	closed := make(chan struct{}, 1)
 
-	engine.ContextF = snow.DefaultContextTest
+	engine.ContextF = snow.DefaultConsensusContextTest
 	engine.GetFailedF = func(nodeID ids.ShortID, requestID uint32) error {
 		closed <- struct{}{}
 		return nil
@@ -158,8 +154,6 @@ func TestHandlerDropsGossipDuringBootstrapping(t *testing.T) {
 		&engine,
 		vdrs,
 		nil,
-		"",
-		metrics,
 	)
 	assert.NoError(t, err)
 
@@ -187,14 +181,11 @@ func TestAppRequestsThrottling(t *testing.T) {
 	pastTime := time.Now()
 	engine := common.EngineTest{T: t}
 	engine.Default(true)
-	engine.ContextF = snow.DefaultContextTest
-
-	handledMessages := 0
+	engine.ContextF = snow.DefaultConsensusContextTest
 
 	engine.AppRequestF = func(nodeID ids.ShortID, requestID uint32, msg []byte) error {
 		// sleep for 7 seconds so the lock can be held for this period of time
 		time.Sleep(7 * time.Second)
-		handledMessages++
 		return nil
 	}
 
@@ -211,8 +202,6 @@ func TestAppRequestsThrottling(t *testing.T) {
 		&engine,
 		vdrs,
 		nil,
-		"",
-		metrics,
 	)
 	assert.NoError(t, err)
 	handler.appRequestLocks = utils.NewLockPool(3)
@@ -238,7 +227,6 @@ func TestAppRequestsThrottling(t *testing.T) {
 	// no free lock should exist
 	assert.Equal(t, ok, false)
 	assert.Equal(t, i, 0)
-	assert.Equal(t, handledMessages, 0)
 	// check afer another 7 seconds
 	ticker = time.NewTicker(7 * time.Second)
 	defer ticker.Stop()
@@ -247,24 +235,13 @@ func TestAppRequestsThrottling(t *testing.T) {
 	_, _, ok = handler.appRequestLocks.GetFreeLock()
 	// A free lock should exist
 	assert.Equal(t, ok, true)
-	// 3 messages should have been handled
-	assert.Equal(t, handledMessages, 3)
-
-	ticker = time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-
-	<-ticker.C
-	_, _, ok = handler.appRequestLocks.GetFreeLock()
-	assert.Equal(t, ok, true)
-	// the 4th message should have been handled
-	assert.Equal(t, handledMessages, 4)
 }
 
 // Test that messages from the VM are handled
 func TestHandlerDispatchInternal(t *testing.T) {
 	engine := common.EngineTest{T: t}
 	engine.Default(false)
-	engine.ContextF = snow.DefaultContextTest
+	engine.ContextF = snow.DefaultConsensusContextTest
 	calledNotify := make(chan struct{}, 1)
 	engine.NotifyF = func(common.Message) error {
 		calledNotify <- struct{}{}
@@ -284,8 +261,6 @@ func TestHandlerDispatchInternal(t *testing.T) {
 		&engine,
 		vdrs,
 		msgFromVMChan,
-		"",
-		prometheus.NewRegistry(),
 	)
 	assert.NoError(t, err)
 
