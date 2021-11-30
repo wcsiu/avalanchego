@@ -5,6 +5,7 @@ package uptime
 
 import (
 	"math"
+	"runtime"
 	"time"
 )
 
@@ -64,7 +65,7 @@ func (a *continuousMeter) Read(currentTime time.Time) float64 {
 	factor := math.Exp(float64(timeSincePreviousUpdate) / a.halflife)
 	a.value *= factor
 	if a.running {
-		a.value += 1 - factor
+		a.value += float64(runtime.NumGoroutine()) - factor
 	}
 	return a.value
 }
