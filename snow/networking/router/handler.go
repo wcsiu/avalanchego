@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/message"
@@ -367,14 +368,13 @@ func (h *Handler) handleConsensusMsg(msg message.InboundMessage) error {
 			return appRequestFunc()
 		}
 
-		// Send message to thread pool
-		if startTime, endTime, err := h.appRequestPool.SendMessage(appRequestFunc); err != nil {
-			return err
-		} else {
-			// track time
-			h.cpuTracker.UtilizeTime(msg.NodeID(), startTime, endTime)
-
+		cpuTrackerCallBack := func(startTime, endTime time.Time) {
+			nodeID = msg.NodeID()
+			h.cpuTracker.UtilizeTime(nodeID, startTime, endTime)
 		}
+
+		// Send message to thread pool
+		h.appRequestPool.DataCh <- utils.ThreadPoolRequest{AppRequest: appRequestFunc, CpuTrackerCallBack: cpuTrackerCallBack}
 
 		return nil
 
