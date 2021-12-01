@@ -31,7 +31,7 @@ func NewThreadPool(size int) *ThreadPool {
 	tPool.size = size
 	tPool.activeWorkers = 0
 	tPool.signalCh = make(chan struct{}, size)
-	tPool.DataCh = make(chan ThreadPoolRequest, size)
+	tPool.DataCh = make(chan ThreadPoolRequest)
 	tPool.closeCh = make(chan struct{})
 	return tPool
 }

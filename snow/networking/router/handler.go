@@ -374,7 +374,7 @@ func (h *Handler) handleConsensusMsg(msg message.InboundMessage) error {
 		}
 
 		// Send message to thread pool
-		h.appRequestPool.DataCh <- utils.ThreadPoolRequest{AppRequest: appRequestFunc, CpuTrackerCallBack: cpuTrackerCallBack}
+		h.appRequestPool.DataCh <- utils.ThreadPoolRequest{AppRequest: appRequestFunc, CPUTrackerCallBack: cpuTrackerCallBack}
 
 		return nil
 
