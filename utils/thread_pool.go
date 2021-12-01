@@ -12,7 +12,7 @@ import (
 
 type ThreadPoolRequest struct {
 	AppRequest         func() error
-	CpuTrackerCallBack func(start, end time.Time)
+	CPUTrackerCallBack func(start, end time.Time)
 }
 
 type ThreadPool struct {
@@ -28,7 +28,6 @@ type ThreadPool struct {
 
 func NewThreadPool(size int) *ThreadPool {
 	tPool := new(ThreadPool)
-	// use a better data structure ?
 	tPool.size = size
 	tPool.activeWorkers = 0
 	tPool.signalCh = make(chan struct{}, size)
@@ -41,18 +40,18 @@ func (t *ThreadPool) freeWorkerExists() bool {
 	return t.size > t.activeWorkers
 }
 
-func (t *ThreadPool) handleMessage(appFunc func() error, trackTimeCallBack func(startTime, endTime time.Time)) {
+func (t *ThreadPool) handleMessage(request ThreadPoolRequest) {
 	// increment active workers
 	t.incrementWorkers()
 	// release active worker
 	defer t.releaseWorker()
 	start := t.clock.Time()
-	if err := appFunc(); err != nil {
+	if err := request.AppRequest(); err != nil {
 		return
 	}
 	end := t.clock.Time()
 	// Run callback to track time
-	trackTimeCallBack(start, end)
+	request.CPUTrackerCallBack(start, end)
 }
 
 func (t *ThreadPool) push(request ThreadPoolRequest) {
@@ -72,10 +71,10 @@ func (t *ThreadPool) pop() (ThreadPoolRequest, bool) {
 func (t *ThreadPool) sendMessage(request ThreadPoolRequest) {
 	// if worker exists, handle message in go routine
 	if t.freeWorkerExists() {
-		go t.handleMessage(request.AppRequest, request.CpuTrackerCallBack)
+		go t.handleMessage(request)
 		return
 	}
-	// add to queue
+	// add to pending queue
 	t.push(request)
 }
 

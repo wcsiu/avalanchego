@@ -16,7 +16,6 @@ import (
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/snow/engine/common"
 	"github.com/ava-labs/avalanchego/snow/validators"
-	"github.com/ava-labs/avalanchego/utils"
 )
 
 func TestHandlerDropsTimedOutMessages(t *testing.T) {
@@ -175,66 +174,6 @@ func TestHandlerDropsGossipDuringBootstrapping(t *testing.T) {
 		t.Fatalf("Handler shutdown timed out before calling toClose")
 	case <-closed:
 	}
-}
-
-func TestAppRequestsThrottling(t *testing.T) {
-	pastTime := time.Now()
-	engine := common.EngineTest{T: t}
-	engine.Default(true)
-	engine.ContextF = snow.DefaultConsensusContextTest
-
-	engine.AppRequestF = func(nodeID ids.ShortID, requestID uint32, msg []byte) error {
-		// sleep for 7 seconds so the lock can be held for this period of time
-		time.Sleep(7 * time.Second)
-		return nil
-	}
-
-	handler := &Handler{}
-	vdrs := validators.NewSet()
-	vdr0 := ids.GenerateTestShortID()
-	err := vdrs.AddWeight(vdr0, 1)
-	assert.NoError(t, err)
-	metrics := prometheus.NewRegistry()
-	mc, err := message.NewCreator(metrics, true /*compressionEnabled*/, "dummyNamespace")
-	assert.NoError(t, err)
-	err = handler.Initialize(
-		mc,
-		&engine,
-		vdrs,
-		nil,
-	)
-	assert.NoError(t, err)
-	handler.appRequestLocks = utils.NewLockPool(3)
-	nodeID := ids.ShortEmpty
-	reqID := uint32(1)
-	deadline := time.Nanosecond
-	chainID := ids.ID{}
-	for _, v := range [][]byte{[]byte("aaa"), []byte("bbb"), []byte("ccc"), []byte("ddd")} {
-		msg := mc.InboundAppRequest(chainID, reqID, deadline, v, nodeID)
-		handler.Push(msg)
-	}
-
-	handler.clock.Set(pastTime)
-
-	go handler.Dispatch()
-
-	// check after 3 seconds to get new lock
-	ticker := time.NewTicker(3 * time.Second)
-	defer ticker.Stop()
-
-	<-ticker.C
-	_, i, ok := handler.appRequestLocks.GetFreeLock()
-	// no free lock should exist
-	assert.Equal(t, ok, false)
-	assert.Equal(t, i, 0)
-	// check afer another 7 seconds
-	ticker = time.NewTicker(7 * time.Second)
-	defer ticker.Stop()
-
-	<-ticker.C
-	_, _, ok = handler.appRequestLocks.GetFreeLock()
-	// A free lock should exist
-	assert.Equal(t, ok, true)
 }
 
 // Test that messages from the VM are handled
