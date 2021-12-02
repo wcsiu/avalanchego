@@ -19,7 +19,6 @@ type ThreadPool struct {
 	sync.Mutex
 	size          int
 	activeWorkers int
-	pendingMap    []ThreadPoolRequest
 	DataCh        chan ThreadPoolRequest
 	signalCh      chan struct{}
 	closeCh       chan struct{}
@@ -33,6 +32,7 @@ func NewThreadPool(size int) *ThreadPool {
 	tPool.signalCh = make(chan struct{}, size)
 	tPool.DataCh = make(chan ThreadPoolRequest)
 	tPool.closeCh = make(chan struct{})
+	tPool.receiveMessages()
 	return tPool
 }
 
@@ -54,28 +54,18 @@ func (t *ThreadPool) handleMessage(request ThreadPoolRequest) {
 	request.CPUTrackerCallBack(start, end)
 }
 
-func (t *ThreadPool) push(request ThreadPoolRequest) {
-	// set limit ?
-	t.pendingMap = append(t.pendingMap, request)
-}
-
-func (t *ThreadPool) pop() (ThreadPoolRequest, bool) {
-	if t.Len() == 0 {
-		return ThreadPoolRequest{}, false
-	}
-	req := t.pendingMap[0]
-	t.pendingMap = t.pendingMap[1:]
-	return req, true
-}
-
 func (t *ThreadPool) sendMessage(request ThreadPoolRequest) {
 	// if worker exists, handle message in go routine
 	if t.freeWorkerExists() {
 		go t.handleMessage(request)
 		return
 	}
-	// add to pending queue
-	t.push(request)
+	// wait for free worker
+	<-t.signalCh
+	// A free worker should definitely exist
+	if t.freeWorkerExists() {
+		go t.handleMessage(request)
+	}
 }
 
 func (t *ThreadPool) Len() int {
@@ -114,7 +104,7 @@ func (t *ThreadPool) CloseCh() {
 	t.closeCh <- struct{}{}
 }
 
-func (t *ThreadPool) WaitForWorker(appFunc func() error) {
+func (t *ThreadPool) receiveMessages() {
 	for {
 		select {
 		case <-t.closeCh:
@@ -125,13 +115,6 @@ func (t *ThreadPool) WaitForWorker(appFunc func() error) {
 				return
 			}
 			t.sendMessage(request)
-
-		case <-t.signalCh:
-			req, ok := t.pop()
-			if !ok {
-				break
-			}
-			t.sendMessage(req)
 		}
 	}
 }
