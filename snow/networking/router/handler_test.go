@@ -176,6 +176,76 @@ func TestHandlerDropsGossipDuringBootstrapping(t *testing.T) {
 	}
 }
 
+func TestAppRequestSync(t *testing.T) {
+	pastTime := time.Now()
+	engine := common.EngineTest{T: t}
+	engine.Default(false)
+	engine.ContextF = snow.DefaultConsensusContextTest
+	calledNotify := make(chan struct{}, 1)
+	engine.AppRequestF = func(nodeID ids.ShortID, requestID uint32, msg []byte) error {
+		// sleep for 7 seconds so the lock can be held for this period of time
+		time.Sleep(3 * time.Second)
+		calledNotify <- struct{}{}
+		return nil
+	}
+
+	handler := &Handler{}
+	msgFromVMChan := make(chan common.Message)
+	vdrs := validators.NewSet()
+	nodeID1, nodeID2 := ids.GenerateTestShortID(), ids.GenerateTestShortID()
+	err := vdrs.AddWeight(nodeID1, 1)
+	assert.NoError(t, err)
+	err = vdrs.AddWeight(nodeID2, 1)
+	assert.NoError(t, err)
+	metrics := prometheus.NewRegistry()
+	mc, err := message.NewCreator(metrics, true /*compressionEnabled*/, "dummyNamespace")
+	assert.NoError(t, err)
+	err = handler.Initialize(
+		mc,
+		&engine,
+		vdrs,
+		msgFromVMChan,
+	)
+	assert.NoError(t, err)
+	// handler.appRequestPool = NewThreadPool(3)
+
+	handler.clock.Set(pastTime)
+
+	reqID := uint32(1)
+	deadline := time.Nanosecond
+	chainID := ids.ID{}
+
+	for _, node := range []ids.ShortID{nodeID1, nodeID2} {
+		for _, v := range [][]byte{[]byte("aaa"), []byte("bbb"), []byte("ccc"), []byte("ddd")} {
+			msg := mc.InboundAppRequest(chainID, reqID, deadline, v, node)
+			handler.Push(msg)
+		}
+	}
+
+	go handler.Dispatch()
+
+	assert.Equal(t, handler.appRequestPool.Len(), defaultThreadPoolSize)
+	// since we have more than 3 messages (3 is the defaultThreadPoolSize) which will sleep for 7 seconds
+	// so no free worker should exist
+	assert.Equal(t, handler.appRequestPool.freeWorkerExists(), false)
+
+	// numAttendedMessages := 0
+
+	// for range calledNotify {
+	// 	numAttendedMessages++
+	// }
+
+	// // check after 3 seconds to get new lock
+	// ticker := time.NewTicker(15 * time.Second)
+	// defer ticker.Stop()
+
+	// <-ticker.C
+
+	// All messages should have been attended to
+	// 4 messages for two different node IDs = 8
+	// assert.Equal(t, numAttendedMessages, 8)
+}
+
 // Test that messages from the VM are handled
 func TestHandlerDispatchInternal(t *testing.T) {
 	engine := common.EngineTest{T: t}

@@ -22,7 +22,7 @@ import (
 
 var errDuplicatedContainerID = errors.New("inbound message contains duplicated container ID")
 
-const defaultThreadPoolSize = 17
+const defaultThreadPoolSize = 3
 
 // Handler passes incoming messages from the network to the consensus engine.
 // (Actually, it receives the incoming messages from a ChainRouter, but same difference.)
