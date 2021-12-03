@@ -73,7 +73,7 @@ func (h *Handler) Initialize(
 	h.validators = validators
 	var lock sync.Mutex
 	h.unprocessedMsgsCond = sync.NewCond(&lock)
-	h.cpuTracker = tracker.NewCPUTracker(uptime.IntervalFactory{}, defaultCPUInterval)
+	h.cpuTracker = tracker.NewCPUTracker(uptime.ContinuousFactory{}, defaultCPUInterval)
 	var err error
 	h.appRequestPool = NewThreadPool(defaultThreadPoolSize, h.cpuTracker)
 	h.unprocessedMsgs, err = newUnprocessedMsgs(h.ctx.Log, h.validators, h.cpuTracker, "handler", h.ctx.Registerer)
@@ -171,7 +171,6 @@ func isPeriodic(inMsg message.InboundMessage) bool {
 
 // Dispatch a message to the consensus engine.
 func (h *Handler) handleMsg(msg message.InboundMessage) error {
-
 	isPeriodic := isPeriodic(msg)
 	if isPeriodic {
 		h.ctx.Log.Verbo("Forwarding message to consensus: %s", msg)
