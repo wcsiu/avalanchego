@@ -1,18 +1,20 @@
 // (c) 2019-2020, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
-package utils
+package router
 
 import (
 	"sync"
-	"time"
 
+	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/snow/networking/tracker"
+	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 )
 
 type ThreadPoolRequest struct {
-	AppRequest         func() error
-	CPUTrackerCallBack func(start, end time.Time)
+	AppRequest func() error
+	NodeID     ids.ShortID
 }
 
 type ThreadPool struct {
@@ -23,16 +25,19 @@ type ThreadPool struct {
 	signalCh      chan struct{}
 	closeCh       chan struct{}
 	clock         mockable.Clock
+	cpuTracker    tracker.TimeTracker
+	log           logging.Logger
 }
 
-func NewThreadPool(size int) *ThreadPool {
+func NewThreadPool(size int, cpuTracker tracker.TimeTracker) *ThreadPool {
 	tPool := new(ThreadPool)
 	tPool.size = size
+	tPool.cpuTracker = cpuTracker
 	tPool.activeWorkers = 0
 	tPool.signalCh = make(chan struct{}, size)
 	tPool.DataCh = make(chan ThreadPoolRequest)
 	tPool.closeCh = make(chan struct{})
-	tPool.receiveMessages()
+	go tPool.receiveMessages()
 	return tPool
 }
 
@@ -43,15 +48,20 @@ func (t *ThreadPool) freeWorkerExists() bool {
 func (t *ThreadPool) handleMessage(request ThreadPoolRequest) {
 	// increment active workers
 	t.incrementWorkers()
+	// increase CPU cores
+	t.cpuTracker.IncreaseCPUCount(request.NodeID)
+	// decrease CPU cores
+	defer t.cpuTracker.DecreaseCPUCount(request.NodeID)
 	// release active worker
 	defer t.releaseWorker()
 	start := t.clock.Time()
 	if err := request.AppRequest(); err != nil {
+		t.log.Info("AppRequest from node ID %s failed with err: %s", request.NodeID, err)
 		return
 	}
 	end := t.clock.Time()
 	// Run callback to track time
-	request.CPUTrackerCallBack(start, end)
+	t.cpuTracker.UtilizeTime(request.NodeID, start, end)
 }
 
 func (t *ThreadPool) sendMessage(request ThreadPoolRequest) {

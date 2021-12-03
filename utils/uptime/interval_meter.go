@@ -48,6 +48,14 @@ func (a *intervalMeter) Stop(currentTime time.Time) {
 	a.update(currentTime, false)
 }
 
+func (a *intervalMeter) IncreaseCPUCount() {
+	// no-op
+}
+
+func (a *intervalMeter) DecreaseCPUCount() {
+	// no-op
+}
+
 func (a *intervalMeter) update(currentTime time.Time, running bool) {
 	if a.running == running {
 		return

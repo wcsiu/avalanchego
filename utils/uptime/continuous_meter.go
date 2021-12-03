@@ -5,7 +5,6 @@ package uptime
 
 import (
 	"math"
-	"runtime"
 	"time"
 )
 
@@ -27,15 +26,17 @@ func (ContinuousFactory) New(halflife time.Duration) Meter {
 type continuousMeter struct {
 	running bool
 
-	halflife    float64
-	value       float64
-	lastUpdated time.Time
+	halflife                    float64
+	value                       float64
+	numCPUCoresCurrentlyRunning int
+	lastUpdated                 time.Time
 }
 
 // NewMeter returns a new Meter with the provided halflife
 func NewMeter(halflife time.Duration) Meter {
 	return &continuousMeter{
-		halflife: float64(halflife) / convertEToBase2,
+		halflife:                    float64(halflife) / convertEToBase2,
+		numCPUCoresCurrentlyRunning: 1,
 	}
 }
 
@@ -45,6 +46,18 @@ func (a *continuousMeter) Start(currentTime time.Time) {
 
 func (a *continuousMeter) Stop(currentTime time.Time) {
 	a.update(currentTime, false)
+}
+
+func (a *continuousMeter) IncreaseCPUCount() {
+	// shouldnt exceed the thread pool size ?
+	a.numCPUCoresCurrentlyRunning++
+}
+
+func (a *continuousMeter) DecreaseCPUCount() {
+	a.numCPUCoresCurrentlyRunning--
+	if a.numCPUCoresCurrentlyRunning < 1 {
+		a.numCPUCoresCurrentlyRunning = 1
+	}
 }
 
 func (a *continuousMeter) update(currentTime time.Time, running bool) {
@@ -65,7 +78,7 @@ func (a *continuousMeter) Read(currentTime time.Time) float64 {
 	factor := math.Exp(float64(timeSincePreviousUpdate) / a.halflife)
 	a.value *= factor
 	if a.running {
-		a.value += float64(runtime.NumGoroutine()) - factor
+		a.value += float64(a.numCPUCoresCurrentlyRunning) * (1 - factor)
 	}
 	return a.value
 }

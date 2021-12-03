@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/message"
@@ -52,7 +51,7 @@ type Handler struct {
 	unprocessedMsgs unprocessedMsgs
 	closing         utils.AtomicBool
 	// Lock pools for throttling consensus messages
-	appRequestPool *utils.ThreadPool
+	appRequestPool *ThreadPool
 }
 
 // Initialize this consensus handler
@@ -76,7 +75,7 @@ func (h *Handler) Initialize(
 	h.unprocessedMsgsCond = sync.NewCond(&lock)
 	h.cpuTracker = tracker.NewCPUTracker(uptime.IntervalFactory{}, defaultCPUInterval)
 	var err error
-	h.appRequestPool = utils.NewThreadPool(defaultThreadPoolSize)
+	h.appRequestPool = NewThreadPool(defaultThreadPoolSize, h.cpuTracker)
 	h.unprocessedMsgs, err = newUnprocessedMsgs(h.ctx.Log, h.validators, h.cpuTracker, "handler", h.ctx.Registerer)
 	return err
 }
@@ -368,13 +367,8 @@ func (h *Handler) handleConsensusMsg(msg message.InboundMessage) error {
 			return appRequestFunc()
 		}
 
-		cpuTrackerCallBack := func(startTime, endTime time.Time) {
-			nodeID = msg.NodeID()
-			h.cpuTracker.UtilizeTime(nodeID, startTime, endTime)
-		}
-
 		// Send message to thread pool
-		h.appRequestPool.DataCh <- utils.ThreadPoolRequest{AppRequest: appRequestFunc, CPUTrackerCallBack: cpuTrackerCallBack}
+		h.appRequestPool.DataCh <- ThreadPoolRequest{AppRequest: appRequestFunc, NodeID: msg.NodeID()}
 
 		return nil
 
