@@ -48,20 +48,16 @@ func (t *ThreadPool) freeWorkerExists() bool {
 func (t *ThreadPool) handleMessage(request ThreadPoolRequest) {
 	// increment active workers
 	t.incrementWorkers()
-	// increase CPU cores
-	t.cpuTracker.IncreaseCPUCount(request.NodeID)
-	// decrease CPU cores
-	defer t.cpuTracker.DecreaseCPUCount(request.NodeID)
-	// release active worker
-	defer t.releaseWorker()
-	start := t.clock.Time()
-	if err := request.AppRequest(); err != nil {
+
+	t.cpuTracker.StartCPU(request.NodeID, t.clock.Time())
+	err := request.AppRequest()
+	t.cpuTracker.StopCPU(request.NodeID, t.clock.Time())
+	if err != nil {
 		t.log.Info("AppRequest from node ID %s failed with err: %s", request.NodeID, err)
-		return
 	}
-	end := t.clock.Time()
-	// Run callback to track time
-	t.cpuTracker.UtilizeTime(request.NodeID, start, end)
+
+	// release active worker
+	t.releaseWorker()
 }
 
 func (t *ThreadPool) sendMessage(request ThreadPoolRequest) {

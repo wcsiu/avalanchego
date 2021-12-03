@@ -171,7 +171,6 @@ func isPeriodic(inMsg message.InboundMessage) bool {
 
 // Dispatch a message to the consensus engine.
 func (h *Handler) handleMsg(msg message.InboundMessage) error {
-	startTime := h.clock.Time()
 
 	isPeriodic := isPeriodic(msg)
 	if isPeriodic {
@@ -183,10 +182,18 @@ func (h *Handler) handleMsg(msg message.InboundMessage) error {
 	h.ctx.Lock.Lock()
 	defer h.ctx.Lock.Unlock()
 
-	var (
-		err error
-		op  = msg.Op()
-	)
+	op := msg.Op()
+	// If the message was caused by another node, track their CPU time.
+	// Include AppRequests as we will use the thread pool time
+	shouldTrackCPU := op != message.Notify && op != message.GossipRequest && op != message.Timeout && op != message.AppRequest
+
+	nodeID := msg.NodeID()
+	startTime := h.clock.Time()
+	if shouldTrackCPU {
+		h.cpuTracker.StartCPU(nodeID, startTime)
+	}
+
+	var err error
 	switch op {
 	case message.Notify:
 		vmMsg := msg.Get(message.VMMessage).(uint32)
@@ -200,11 +207,8 @@ func (h *Handler) handleMsg(msg message.InboundMessage) error {
 	}
 
 	endTime := h.clock.Time()
-	// If the message was caused by another node, track their CPU time.
-	// Include AppRequests as we will use the thread pool time
-	if op != message.Notify && op != message.GossipRequest && op != message.Timeout && op != message.AppRequest {
-		nodeID := msg.NodeID()
-		h.cpuTracker.UtilizeTime(nodeID, startTime, endTime)
+	if shouldTrackCPU {
+		h.cpuTracker.StopCPU(nodeID, endTime)
 	}
 
 	// Track how long the operation took.
@@ -368,7 +372,10 @@ func (h *Handler) handleConsensusMsg(msg message.InboundMessage) error {
 		}
 
 		// Send message to thread pool
-		h.appRequestPool.DataCh <- ThreadPoolRequest{AppRequest: appRequestFunc, NodeID: msg.NodeID()}
+		h.appRequestPool.DataCh <- ThreadPoolRequest{
+			AppRequest: appRequestFunc,
+			NodeID:     msg.NodeID(),
+		}
 
 		return nil
 

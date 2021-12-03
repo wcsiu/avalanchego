@@ -61,16 +61,12 @@ func (_m *MockTimeTracker) Utilization(_a0 ids.ShortID, _a1 time.Time) float64 {
 	return r0
 }
 
-// UtilizeTime provides a mock function with given fields: _a0, _a1, _a2
-func (_m *MockTimeTracker) UtilizeTime(_a0 ids.ShortID, _a1 time.Time, _a2 time.Time) {
-	_m.Called(_a0, _a1, _a2)
+// StartCPU provides a mock function with given fields: _a0, _a1
+func (_m *MockTimeTracker) StartCPU(_a0 ids.ShortID, _a1 time.Time) {
+	_m.Called(_a0, _a1)
 }
 
-func (_m *MockTimeTracker) IncreaseCPUCount(_a0 ids.ShortID) {
-	_m.Called(_a0)
-
-}
-
-func (_m *MockTimeTracker) DecreaseCPUCount(_a0 ids.ShortID) {
-	_m.Called(_a0)
+// StopCPU provides a mock function with given fields: _a0, _a1
+func (_m *MockTimeTracker) StopCPU(_a0 ids.ShortID, _a1 time.Time) {
+	_m.Called(_a0, _a1)
 }

@@ -22,8 +22,4 @@ type Meter interface {
 	// percent of time the meter has been running recently. The definition of
 	// recently depends on the halflife of the decay function.
 	Read(time.Time) float64
-
-	IncreaseCPUCount()
-
-	DecreaseCPUCount()
 }
