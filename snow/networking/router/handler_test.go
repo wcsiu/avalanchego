@@ -230,7 +230,7 @@ func TestAppRequestSync(t *testing.T) {
 	// All messages should have been attended to
 	// 4 messages were sent in total
 	assert.Equal(t, len(calledNotify), cap(calledNotify))
-	close(calledNotify)
+	// close(calledNotify)
 }
 
 // Test that messages from the VM are handled
