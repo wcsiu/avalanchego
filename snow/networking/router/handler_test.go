@@ -183,8 +183,8 @@ func TestAppRequestSync(t *testing.T) {
 	engine.ContextF = snow.DefaultConsensusContextTest
 	calledNotify := make(chan struct{}, 4)
 	engine.AppRequestF = func(nodeID ids.ShortID, requestID uint32, msg []byte) error {
-		// sleep for 7 seconds so the lock can be held for this period of time
-		time.Sleep(3 * time.Second)
+		// sleep for 3 seconds so the lock can be held for this period of time
+		time.Sleep(2 * time.Second)
 		calledNotify <- struct{}{}
 		return nil
 	}
@@ -220,8 +220,6 @@ func TestAppRequestSync(t *testing.T) {
 	go handler.Dispatch()
 
 	assert.Equal(t, handler.appRequestPool.Len(), defaultThreadPoolSize)
-
-	// check after 3 seconds to get new lock
 	ticker := time.NewTicker(20 * time.Second)
 	defer ticker.Stop()
 
@@ -230,7 +228,6 @@ func TestAppRequestSync(t *testing.T) {
 	// All messages should have been attended to
 	// 4 messages were sent in total
 	assert.Equal(t, len(calledNotify), cap(calledNotify))
-	// close(calledNotify)
 }
 
 // Test that messages from the VM are handled
