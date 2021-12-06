@@ -42,6 +42,8 @@ func NewThreadPool(size int, cpuTracker tracker.TimeTracker) *ThreadPool {
 }
 
 func (t *ThreadPool) freeWorkerExists() bool {
+	t.Lock()
+	defer t.Unlock()
 	return t.size > t.activeWorkers
 }
 

@@ -181,7 +181,7 @@ func TestAppRequestSync(t *testing.T) {
 	engine := common.EngineTest{T: t}
 	engine.Default(false)
 	engine.ContextF = snow.DefaultConsensusContextTest
-	calledNotify := make(chan struct{}, 1)
+	calledNotify := make(chan struct{}, 4)
 	engine.AppRequestF = func(nodeID ids.ShortID, requestID uint32, msg []byte) error {
 		// sleep for 7 seconds so the lock can be held for this period of time
 		time.Sleep(3 * time.Second)
@@ -192,10 +192,8 @@ func TestAppRequestSync(t *testing.T) {
 	handler := &Handler{}
 	msgFromVMChan := make(chan common.Message)
 	vdrs := validators.NewSet()
-	nodeID1, nodeID2 := ids.GenerateTestShortID(), ids.GenerateTestShortID()
-	err := vdrs.AddWeight(nodeID1, 1)
-	assert.NoError(t, err)
-	err = vdrs.AddWeight(nodeID2, 1)
+	nodeID := ids.GenerateTestShortID()
+	err := vdrs.AddWeight(nodeID, 1)
 	assert.NoError(t, err)
 	metrics := prometheus.NewRegistry()
 	mc, err := message.NewCreator(metrics, true /*compressionEnabled*/, "dummyNamespace")
@@ -207,7 +205,6 @@ func TestAppRequestSync(t *testing.T) {
 		msgFromVMChan,
 	)
 	assert.NoError(t, err)
-	// handler.appRequestPool = NewThreadPool(3)
 
 	handler.clock.Set(pastTime)
 
@@ -215,35 +212,25 @@ func TestAppRequestSync(t *testing.T) {
 	deadline := time.Nanosecond
 	chainID := ids.ID{}
 
-	for _, node := range []ids.ShortID{nodeID1, nodeID2} {
-		for _, v := range [][]byte{[]byte("aaa"), []byte("bbb"), []byte("ccc"), []byte("ddd")} {
-			msg := mc.InboundAppRequest(chainID, reqID, deadline, v, node)
-			handler.Push(msg)
-		}
+	for _, v := range [][]byte{[]byte("aaa"), []byte("bbb"), []byte("ccc"), []byte("ddd")} {
+		msg := mc.InboundAppRequest(chainID, reqID, deadline, v, nodeID)
+		handler.Push(msg)
 	}
 
 	go handler.Dispatch()
 
 	assert.Equal(t, handler.appRequestPool.Len(), defaultThreadPoolSize)
-	// since we have more than 3 messages (3 is the defaultThreadPoolSize) which will sleep for 7 seconds
-	// so no free worker should exist
-	assert.Equal(t, handler.appRequestPool.freeWorkerExists(), false)
 
-	// numAttendedMessages := 0
+	// check after 3 seconds to get new lock
+	ticker := time.NewTicker(20 * time.Second)
+	defer ticker.Stop()
 
-	// for range calledNotify {
-	// 	numAttendedMessages++
-	// }
-
-	// // check after 3 seconds to get new lock
-	// ticker := time.NewTicker(15 * time.Second)
-	// defer ticker.Stop()
-
-	// <-ticker.C
+	<-ticker.C
 
 	// All messages should have been attended to
-	// 4 messages for two different node IDs = 8
-	// assert.Equal(t, numAttendedMessages, 8)
+	// 4 messages were sent in total
+	assert.Equal(t, len(calledNotify), cap(calledNotify))
+	close(calledNotify)
 }
 
 // Test that messages from the VM are handled
