@@ -27,7 +27,6 @@ type threadPoolRequest struct {
 
 type threadPool struct {
 	sync.Mutex
-	size       int
 	dataCh     chan threadPoolRequest
 	clock      mockable.Clock
 	cpuTracker tracker.TimeTracker
@@ -36,7 +35,6 @@ type threadPool struct {
 
 func newThreadPool(size int, cpuTracker tracker.TimeTracker) *threadPool {
 	tPool := new(threadPool)
-	tPool.size = size
 	tPool.cpuTracker = cpuTracker
 	tPool.dataCh = make(chan threadPoolRequest)
 	for w := 1; w <= size; w++ {
