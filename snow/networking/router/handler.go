@@ -51,7 +51,7 @@ type Handler struct {
 	unprocessedMsgs unprocessedMsgs
 	closing         utils.AtomicBool
 	// Lock pools for throttling consensus messages
-	appMessagesPool *ThreadPool
+	appMessagesPool *threadPool
 }
 
 // Initialize this consensus handler
@@ -75,7 +75,7 @@ func (h *Handler) Initialize(
 	h.unprocessedMsgsCond = sync.NewCond(&lock)
 	h.cpuTracker = tracker.NewCPUTracker(uptime.ContinuousFactory{}, defaultCPUInterval)
 	var err error
-	h.appMessagesPool = NewThreadPool(defaultThreadPoolSize, h.cpuTracker)
+	h.appMessagesPool = newThreadPool(defaultThreadPoolSize, h.cpuTracker)
 	h.unprocessedMsgs, err = newUnprocessedMsgs(h.ctx.Log, h.validators, h.cpuTracker, "handler", h.ctx.Registerer)
 	return err
 }
@@ -362,11 +362,11 @@ func (h *Handler) handleConsensusMsg(msg message.InboundMessage) error {
 			return h.engine.AppRequest(nodeID, reqID, msg.ExpirationTime(), appBytes)
 		}
 		// Send message to thread pool
-		h.appMessagesPool.DataCh <- ThreadPoolRequest{
+		h.appMessagesPool.send(threadPoolRequest{
 			Request: appFunc,
 			NodeID:  msg.NodeID(),
 			Op:      msg.Op().String(),
-		}
+		})
 
 		return nil
 
@@ -376,11 +376,11 @@ func (h *Handler) handleConsensusMsg(msg message.InboundMessage) error {
 			return h.engine.AppRequestFailed(nodeID, reqID)
 		}
 		// Send message to thread pool
-		h.appMessagesPool.DataCh <- ThreadPoolRequest{
+		h.appMessagesPool.send(threadPoolRequest{
 			Request: appFunc,
 			NodeID:  msg.NodeID(),
 			Op:      msg.Op().String(),
-		}
+		})
 
 		return nil
 
@@ -396,11 +396,11 @@ func (h *Handler) handleConsensusMsg(msg message.InboundMessage) error {
 			return h.engine.AppResponse(nodeID, reqID, appBytes)
 		}
 		// Send message to thread pool
-		h.appMessagesPool.DataCh <- ThreadPoolRequest{
+		h.appMessagesPool.send(threadPoolRequest{
 			Request: appFunc,
 			NodeID:  msg.NodeID(),
 			Op:      msg.Op().String(),
-		}
+		})
 
 		return nil
 
@@ -415,12 +415,11 @@ func (h *Handler) handleConsensusMsg(msg message.InboundMessage) error {
 			return h.engine.AppGossip(nodeID, appBytes)
 		}
 		// Send message to thread pool
-		h.appMessagesPool.DataCh <- ThreadPoolRequest{
+		h.appMessagesPool.send(threadPoolRequest{
 			Request: appFunc,
 			NodeID:  msg.NodeID(),
 			Op:      msg.Op().String(),
-		}
-
+		})
 		return nil
 
 	default:

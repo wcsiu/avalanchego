@@ -12,55 +12,50 @@ import (
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 )
 
-var _ TPool = &ThreadPool{}
+var _ tPool = &threadPool{}
 
-type TPool interface {
-	worker(int, chan ThreadPoolRequest)
-	Len() int
-	CloseCh()
+type tPool interface {
+	worker()
+	send(threadPoolRequest)
 }
 
-type ThreadPoolRequest struct {
+type threadPoolRequest struct {
 	Request func() error
 	NodeID  ids.ShortID
 	Op      string
 }
 
-type ThreadPool struct {
+type threadPool struct {
 	sync.Mutex
 	size       int
-	DataCh     chan ThreadPoolRequest
+	dataCh     chan threadPoolRequest
 	clock      mockable.Clock
 	cpuTracker tracker.TimeTracker
 	log        logging.Logger
 }
 
-func NewThreadPool(size int, cpuTracker tracker.TimeTracker) *ThreadPool {
-	tPool := new(ThreadPool)
+func newThreadPool(size int, cpuTracker tracker.TimeTracker) *threadPool {
+	tPool := new(threadPool)
 	tPool.size = size
 	tPool.cpuTracker = cpuTracker
-	tPool.DataCh = make(chan ThreadPoolRequest, size)
+	tPool.dataCh = make(chan threadPoolRequest)
 	for w := 1; w <= size; w++ {
-		go tPool.worker(w, tPool.DataCh)
+		go tPool.worker()
 	}
 	return tPool
 }
 
-func (t *ThreadPool) worker(id int, dataCh chan ThreadPoolRequest) {
-	for request := range dataCh {
+func (t *threadPool) worker() {
+	for request := range t.dataCh {
 		t.cpuTracker.StartCPU(request.NodeID, t.clock.Time())
 		err := request.Request()
 		t.cpuTracker.StopCPU(request.NodeID, t.clock.Time())
 		if err != nil {
-			t.log.Info("Request of type %s from node ID %s on worker ID %d failed with err: %s", request.Op, request.NodeID, id, err)
+			t.log.Info("Request of type %s from node ID %s failed with err: %s", request.Op, request.NodeID, err)
 		}
 	}
 }
 
-func (t *ThreadPool) Len() int {
-	return t.size
-}
-
-func (t *ThreadPool) CloseCh() {
-	close(t.DataCh)
+func (t *threadPool) send(msg threadPoolRequest) {
+	t.dataCh <- msg
 }
