@@ -4,8 +4,6 @@
 package router
 
 import (
-	"sync"
-
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/networking/tracker"
 	"github.com/ava-labs/avalanchego/utils/logging"
@@ -26,7 +24,6 @@ type threadPoolRequest struct {
 }
 
 type threadPool struct {
-	sync.Mutex
 	dataCh     chan threadPoolRequest
 	clock      mockable.Clock
 	cpuTracker tracker.TimeTracker
