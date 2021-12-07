@@ -13,66 +13,39 @@ import (
 )
 
 type ThreadPoolRequest struct {
-	AppRequest func() error
-	NodeID     ids.ShortID
+	Request func() error
+	NodeID  ids.ShortID
+	Op      string
 }
 
 type ThreadPool struct {
 	sync.Mutex
-	size          int
-	activeWorkers int
-	DataCh        chan ThreadPoolRequest
-	signalCh      chan struct{}
-	closeCh       chan struct{}
-	clock         mockable.Clock
-	cpuTracker    tracker.TimeTracker
-	log           logging.Logger
+	size       int
+	DataCh     chan ThreadPoolRequest
+	clock      mockable.Clock
+	cpuTracker tracker.TimeTracker
+	log        logging.Logger
 }
 
 func NewThreadPool(size int, cpuTracker tracker.TimeTracker) *ThreadPool {
 	tPool := new(ThreadPool)
 	tPool.size = size
 	tPool.cpuTracker = cpuTracker
-	tPool.activeWorkers = 0
-	tPool.signalCh = make(chan struct{}, size)
-	tPool.DataCh = make(chan ThreadPoolRequest)
-	tPool.closeCh = make(chan struct{})
-	go tPool.receiveMessages()
+	tPool.DataCh = make(chan ThreadPoolRequest, size)
+	for w := 1; w <= size; w++ {
+		go tPool.worker(w, tPool.DataCh)
+	}
 	return tPool
 }
 
-func (t *ThreadPool) freeWorkerExists() bool {
-	t.Lock()
-	defer t.Unlock()
-	return t.size > t.activeWorkers
-}
-
-func (t *ThreadPool) handleMessage(request ThreadPoolRequest) {
-	// increment active workers
-	t.incrementWorkers()
-
-	t.cpuTracker.StartCPU(request.NodeID, t.clock.Time())
-	err := request.AppRequest()
-	t.cpuTracker.StopCPU(request.NodeID, t.clock.Time())
-	if err != nil {
-		t.log.Info("AppRequest from node ID %s failed with err: %s", request.NodeID, err)
-	}
-
-	// release active worker
-	t.releaseWorker()
-}
-
-func (t *ThreadPool) sendMessage(request ThreadPoolRequest) {
-	// if worker exists, handle message in go routine
-	if t.freeWorkerExists() {
-		go t.handleMessage(request)
-		return
-	}
-	// wait for free worker
-	<-t.signalCh
-	// A free worker should definitely exist
-	if t.freeWorkerExists() {
-		go t.handleMessage(request)
+func (t *ThreadPool) worker(id int, dataCh chan ThreadPoolRequest) {
+	for request := range dataCh {
+		t.cpuTracker.StartCPU(request.NodeID, t.clock.Time())
+		err := request.Request()
+		t.cpuTracker.StopCPU(request.NodeID, t.clock.Time())
+		if err != nil {
+			t.log.Info("Request of type %s from node ID %s on worker ID %d failed with err: %s", request.Op, request.NodeID, id, err)
+		}
 	}
 }
 
@@ -80,49 +53,6 @@ func (t *ThreadPool) Len() int {
 	return t.size
 }
 
-func (t *ThreadPool) incrementWorkers() {
-	t.Lock()
-	defer t.Unlock()
-	t.activeWorkers++
-	if t.activeWorkers > t.size {
-		t.activeWorkers = t.size
-	}
-}
-
-func (t *ThreadPool) decrementWorkers() {
-	t.Lock()
-	defer t.Unlock()
-	t.activeWorkers--
-	if t.activeWorkers < 0 {
-		t.activeWorkers = 0
-	}
-}
-
-func (t *ThreadPool) releaseWorker() {
-	t.Lock()
-	defer t.Unlock()
-	t.decrementWorkers()
-	// dont signal if the buffer is full
-	if len(t.signalCh) != cap(t.signalCh) {
-		t.signalCh <- struct{}{}
-	}
-}
-
 func (t *ThreadPool) CloseCh() {
-	t.closeCh <- struct{}{}
-}
-
-func (t *ThreadPool) receiveMessages() {
-	for {
-		select {
-		case <-t.closeCh:
-			close(t.DataCh)
-			close(t.signalCh)
-		case request, ok := <-t.DataCh:
-			if !ok {
-				return
-			}
-			t.sendMessage(request)
-		}
-	}
+	close(t.DataCh)
 }

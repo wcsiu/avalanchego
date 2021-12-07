@@ -51,7 +51,7 @@ type Handler struct {
 	unprocessedMsgs unprocessedMsgs
 	closing         utils.AtomicBool
 	// Lock pools for throttling consensus messages
-	appRequestPool *ThreadPool
+	appMessagesPool *ThreadPool
 }
 
 // Initialize this consensus handler
@@ -75,7 +75,7 @@ func (h *Handler) Initialize(
 	h.unprocessedMsgsCond = sync.NewCond(&lock)
 	h.cpuTracker = tracker.NewCPUTracker(uptime.ContinuousFactory{}, defaultCPUInterval)
 	var err error
-	h.appRequestPool = NewThreadPool(defaultThreadPoolSize, h.cpuTracker)
+	h.appMessagesPool = NewThreadPool(defaultThreadPoolSize, h.cpuTracker)
 	h.unprocessedMsgs, err = newUnprocessedMsgs(h.ctx.Log, h.validators, h.cpuTracker, "handler", h.ctx.Registerer)
 	return err
 }
@@ -183,9 +183,8 @@ func (h *Handler) handleMsg(msg message.InboundMessage) error {
 
 	op := msg.Op()
 	// If the message was caused by another node, track their CPU time.
-	// Include AppRequests as we will use the thread pool time
-	shouldTrackCPU := op != message.Notify && op != message.GossipRequest && op != message.Timeout && op != message.AppRequest
-
+	// If the message will be handled async, dont track their CPU time as it will be handled by the thread pool
+	shouldTrackCPU := op != message.Notify && op != message.GossipRequest && op != message.Timeout && !op.HandleAsync()
 	nodeID := msg.NodeID()
 	startTime := h.clock.Time()
 	if shouldTrackCPU {
@@ -352,10 +351,7 @@ func (h *Handler) handleConsensusMsg(msg message.InboundMessage) error {
 		return h.engine.Disconnected(nodeID)
 
 	case message.AppRequest:
-		// determine if consensus message should be handled with go routines
-		handleAsync := msg.Op().HandleAsync()
-
-		appRequestFunc := func() error {
+		appFunc := func() error {
 			reqID := msg.Get(message.RequestID).(uint32)
 			appBytes, ok := msg.Get(message.AppBytes).([]byte)
 			if !ok {
@@ -365,41 +361,67 @@ func (h *Handler) handleConsensusMsg(msg message.InboundMessage) error {
 			}
 			return h.engine.AppRequest(nodeID, reqID, msg.ExpirationTime(), appBytes)
 		}
-
-		if !handleAsync {
-			return appRequestFunc()
-		}
-
 		// Send message to thread pool
-		h.appRequestPool.DataCh <- ThreadPoolRequest{
-			AppRequest: appRequestFunc,
-			NodeID:     msg.NodeID(),
+		h.appMessagesPool.DataCh <- ThreadPoolRequest{
+			Request: appFunc,
+			NodeID:  msg.NodeID(),
+			Op:      msg.Op().String(),
 		}
 
 		return nil
 
 	case message.AppRequestFailed:
-		reqID := msg.Get(message.RequestID).(uint32)
-		return h.engine.AppRequestFailed(nodeID, reqID)
+		appFunc := func() error {
+			reqID := msg.Get(message.RequestID).(uint32)
+			return h.engine.AppRequestFailed(nodeID, reqID)
+		}
+		// Send message to thread pool
+		h.appMessagesPool.DataCh <- ThreadPoolRequest{
+			Request: appFunc,
+			NodeID:  msg.NodeID(),
+			Op:      msg.Op().String(),
+		}
+
+		return nil
 
 	case message.AppResponse:
-		reqID := msg.Get(message.RequestID).(uint32)
-		appBytes, ok := msg.Get(message.AppBytes).([]byte)
-		if !ok {
-			h.ctx.Log.Debug("Malformed message %s from (%s, %s, %d) dropped. Error: could not parse AppBytes",
-				msg.Op(), nodeID, h.engine.Context().ChainID, reqID)
-			return nil
+		appFunc := func() error {
+			reqID := msg.Get(message.RequestID).(uint32)
+			appBytes, ok := msg.Get(message.AppBytes).([]byte)
+			if !ok {
+				h.ctx.Log.Debug("Malformed message %s from (%s, %s, %d) dropped. Error: could not parse AppBytes",
+					msg.Op(), nodeID, h.engine.Context().ChainID, reqID)
+				return nil
+			}
+			return h.engine.AppResponse(nodeID, reqID, appBytes)
 		}
-		return h.engine.AppResponse(nodeID, reqID, appBytes)
+		// Send message to thread pool
+		h.appMessagesPool.DataCh <- ThreadPoolRequest{
+			Request: appFunc,
+			NodeID:  msg.NodeID(),
+			Op:      msg.Op().String(),
+		}
+
+		return nil
 
 	case message.AppGossip:
-		appBytes, ok := msg.Get(message.AppBytes).([]byte)
-		if !ok {
-			h.ctx.Log.Debug("Malformed message %s from (%s, %s, %d) dropped. Error: could not parse AppBytes",
-				msg.Op(), nodeID, h.engine.Context().ChainID, constants.GossipMsgRequestID)
-			return nil
+		appFunc := func() error {
+			appBytes, ok := msg.Get(message.AppBytes).([]byte)
+			if !ok {
+				h.ctx.Log.Debug("Malformed message %s from (%s, %s, %d) dropped. Error: could not parse AppBytes",
+					msg.Op(), nodeID, h.engine.Context().ChainID, constants.GossipMsgRequestID)
+				return nil
+			}
+			return h.engine.AppGossip(nodeID, appBytes)
 		}
-		return h.engine.AppGossip(nodeID, appBytes)
+		// Send message to thread pool
+		h.appMessagesPool.DataCh <- ThreadPoolRequest{
+			Request: appFunc,
+			NodeID:  msg.NodeID(),
+			Op:      msg.Op().String(),
+		}
+
+		return nil
 
 	default:
 		h.ctx.Log.Warn("Attempt to submit to engine unhandled consensus msg %s from from (%s, %s). Dropping it",

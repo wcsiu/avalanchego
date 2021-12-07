@@ -219,7 +219,7 @@ func TestAppRequestSync(t *testing.T) {
 
 	go handler.Dispatch()
 
-	assert.Equal(t, handler.appRequestPool.Len(), defaultThreadPoolSize)
+	assert.Equal(t, handler.appMessagesPool.Len(), defaultThreadPoolSize)
 	ticker := time.NewTicker(20 * time.Second)
 	defer ticker.Stop()
 

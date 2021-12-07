@@ -187,7 +187,7 @@ func (op Op) Compressable() bool {
 
 func (op Op) HandleAsync() bool {
 	switch op {
-	case AppRequest:
+	case AppRequest, AppGossip, AppRequestFailed, AppResponse:
 		return true
 	default:
 		return false
