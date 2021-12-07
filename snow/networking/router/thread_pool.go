@@ -12,6 +12,14 @@ import (
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 )
 
+var _ TPool = &ThreadPool{}
+
+type TPool interface {
+	worker(int, chan ThreadPoolRequest)
+	Len() int
+	CloseCh()
+}
+
 type ThreadPoolRequest struct {
 	Request func() error
 	NodeID  ids.ShortID
