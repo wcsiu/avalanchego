@@ -22,6 +22,8 @@ import (
 
 var errDuplicatedContainerID = errors.New("inbound message contains duplicated container ID")
 
+const defaultThreadPoolSize = 3
+
 // Handler passes incoming messages from the network to the consensus engine.
 // (Actually, it receives the incoming messages from a ChainRouter, but same difference.)
 type Handler struct {
@@ -48,6 +50,8 @@ type Handler struct {
 	// [unprocessedMsgsCond.L] must be held while accessing [unprocessedMsgs].
 	unprocessedMsgs unprocessedMsgs
 	closing         utils.AtomicBool
+	// Lock pools for throttling consensus messages
+	appMessagesPool *threadPool
 }
 
 // Initialize this consensus handler
@@ -69,8 +73,9 @@ func (h *Handler) Initialize(
 	h.validators = validators
 	var lock sync.Mutex
 	h.unprocessedMsgsCond = sync.NewCond(&lock)
-	h.cpuTracker = tracker.NewCPUTracker(uptime.IntervalFactory{}, defaultCPUInterval)
+	h.cpuTracker = tracker.NewCPUTracker(uptime.ContinuousFactory{}, defaultCPUInterval)
 	var err error
+	h.appMessagesPool = newThreadPool(defaultThreadPoolSize, h.cpuTracker)
 	h.unprocessedMsgs, err = newUnprocessedMsgs(h.ctx.Log, h.validators, h.cpuTracker, "handler", h.ctx.Registerer)
 	return err
 }
@@ -166,8 +171,6 @@ func isPeriodic(inMsg message.InboundMessage) bool {
 
 // Dispatch a message to the consensus engine.
 func (h *Handler) handleMsg(msg message.InboundMessage) error {
-	startTime := h.clock.Time()
-
 	isPeriodic := isPeriodic(msg)
 	if isPeriodic {
 		h.ctx.Log.Verbo("Forwarding message to consensus: %s", msg)
@@ -178,10 +181,17 @@ func (h *Handler) handleMsg(msg message.InboundMessage) error {
 	h.ctx.Lock.Lock()
 	defer h.ctx.Lock.Unlock()
 
-	var (
-		err error
-		op  = msg.Op()
-	)
+	op := msg.Op()
+	// If the message was caused by another node, track their CPU time.
+	// If the message will be handled async, dont track their CPU time as it will be handled by the thread pool
+	shouldTrackCPU := op != message.Notify && op != message.GossipRequest && op != message.Timeout && !op.HandleAsync()
+	nodeID := msg.NodeID()
+	startTime := h.clock.Time()
+	if shouldTrackCPU {
+		h.cpuTracker.StartCPU(nodeID, startTime)
+	}
+
+	var err error
 	switch op {
 	case message.Notify:
 		vmMsg := msg.Get(message.VMMessage).(uint32)
@@ -195,10 +205,8 @@ func (h *Handler) handleMsg(msg message.InboundMessage) error {
 	}
 
 	endTime := h.clock.Time()
-	// If the message was caused by another node, track their CPU time.
-	if op != message.Notify && op != message.GossipRequest && op != message.Timeout {
-		nodeID := msg.NodeID()
-		h.cpuTracker.UtilizeTime(nodeID, startTime, endTime)
+	if shouldTrackCPU {
+		h.cpuTracker.StopCPU(nodeID, endTime)
 	}
 
 	// Track how long the operation took.
@@ -343,37 +351,76 @@ func (h *Handler) handleConsensusMsg(msg message.InboundMessage) error {
 		return h.engine.Disconnected(nodeID)
 
 	case message.AppRequest:
-		reqID := msg.Get(message.RequestID).(uint32)
-		appBytes, ok := msg.Get(message.AppBytes).([]byte)
-		if !ok {
-			h.ctx.Log.Debug("Malformed message %s from (%s, %s, %d) dropped. Error: could not parse AppBytes",
-				msg.Op(), nodeID, h.engine.Context().ChainID, reqID)
-			return nil
+		appFunc := func() error {
+			reqID := msg.Get(message.RequestID).(uint32)
+			appBytes, ok := msg.Get(message.AppBytes).([]byte)
+			if !ok {
+				h.ctx.Log.Debug("Malformed message %s from (%s, %s, %d) dropped. Error: could not parse AppBytes",
+					msg.Op(), nodeID, h.engine.Context().ChainID, reqID)
+				return nil
+			}
+			return h.engine.AppRequest(nodeID, reqID, msg.ExpirationTime(), appBytes)
 		}
-		return h.engine.AppRequest(nodeID, reqID, msg.ExpirationTime(), appBytes)
+		// Send message to thread pool
+		h.appMessagesPool.send(threadPoolRequest{
+			Request: appFunc,
+			NodeID:  msg.NodeID(),
+			Op:      msg.Op().String(),
+		})
+
+		return nil
 
 	case message.AppRequestFailed:
-		reqID := msg.Get(message.RequestID).(uint32)
-		return h.engine.AppRequestFailed(nodeID, reqID)
+		appFunc := func() error {
+			reqID := msg.Get(message.RequestID).(uint32)
+			return h.engine.AppRequestFailed(nodeID, reqID)
+		}
+		// Send message to thread pool
+		h.appMessagesPool.send(threadPoolRequest{
+			Request: appFunc,
+			NodeID:  msg.NodeID(),
+			Op:      msg.Op().String(),
+		})
+
+		return nil
 
 	case message.AppResponse:
-		reqID := msg.Get(message.RequestID).(uint32)
-		appBytes, ok := msg.Get(message.AppBytes).([]byte)
-		if !ok {
-			h.ctx.Log.Debug("Malformed message %s from (%s, %s, %d) dropped. Error: could not parse AppBytes",
-				msg.Op(), nodeID, h.engine.Context().ChainID, reqID)
-			return nil
+		appFunc := func() error {
+			reqID := msg.Get(message.RequestID).(uint32)
+			appBytes, ok := msg.Get(message.AppBytes).([]byte)
+			if !ok {
+				h.ctx.Log.Debug("Malformed message %s from (%s, %s, %d) dropped. Error: could not parse AppBytes",
+					msg.Op(), nodeID, h.engine.Context().ChainID, reqID)
+				return nil
+			}
+			return h.engine.AppResponse(nodeID, reqID, appBytes)
 		}
-		return h.engine.AppResponse(nodeID, reqID, appBytes)
+		// Send message to thread pool
+		h.appMessagesPool.send(threadPoolRequest{
+			Request: appFunc,
+			NodeID:  msg.NodeID(),
+			Op:      msg.Op().String(),
+		})
+
+		return nil
 
 	case message.AppGossip:
-		appBytes, ok := msg.Get(message.AppBytes).([]byte)
-		if !ok {
-			h.ctx.Log.Debug("Malformed message %s from (%s, %s, %d) dropped. Error: could not parse AppBytes",
-				msg.Op(), nodeID, h.engine.Context().ChainID, constants.GossipMsgRequestID)
-			return nil
+		appFunc := func() error {
+			appBytes, ok := msg.Get(message.AppBytes).([]byte)
+			if !ok {
+				h.ctx.Log.Debug("Malformed message %s from (%s, %s, %d) dropped. Error: could not parse AppBytes",
+					msg.Op(), nodeID, h.engine.Context().ChainID, constants.GossipMsgRequestID)
+				return nil
+			}
+			return h.engine.AppGossip(nodeID, appBytes)
 		}
-		return h.engine.AppGossip(nodeID, appBytes)
+		// Send message to thread pool
+		h.appMessagesPool.send(threadPoolRequest{
+			Request: appFunc,
+			NodeID:  msg.NodeID(),
+			Op:      msg.Op().String(),
+		})
+		return nil
 
 	default:
 		h.ctx.Log.Warn("Attempt to submit to engine unhandled consensus msg %s from from (%s, %s). Dropping it",

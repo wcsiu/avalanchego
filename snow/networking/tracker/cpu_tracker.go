@@ -17,7 +17,8 @@ const (
 
 // TimeTracker is an interface for tracking peers' usage of CPU Time
 type TimeTracker interface {
-	UtilizeTime(ids.ShortID, time.Time, time.Time)
+	StartCPU(ids.ShortID, time.Time)
+	StopCPU(ids.ShortID, time.Time)
 	Utilization(ids.ShortID, time.Time) float64
 	CumulativeUtilization(time.Time) float64
 	Len() int
@@ -59,14 +60,23 @@ func (ct *cpuTracker) getMeter(vdr ids.ShortID) uptime.Meter {
 
 // UtilizeTime registers the use of CPU time by [vdr] from [startTime]
 // to [endTime]
-func (ct *cpuTracker) UtilizeTime(vdr ids.ShortID, startTime, endTime time.Time) {
+func (ct *cpuTracker) StartCPU(vdr ids.ShortID, startTime time.Time) {
 	ct.lock.Lock()
 	defer ct.lock.Unlock()
 
 	meter := ct.getMeter(vdr)
 	ct.cumulativeMeter.Start(startTime)
-	ct.cumulativeMeter.Stop(endTime)
 	meter.Start(startTime)
+}
+
+// UtilizeTime registers the use of CPU time by [vdr] from [startTime]
+// to [endTime]
+func (ct *cpuTracker) StopCPU(vdr ids.ShortID, endTime time.Time) {
+	ct.lock.Lock()
+	defer ct.lock.Unlock()
+
+	meter := ct.getMeter(vdr)
+	ct.cumulativeMeter.Stop(endTime)
 	meter.Stop(endTime)
 }
 

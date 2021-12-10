@@ -176,6 +176,59 @@ func TestHandlerDropsGossipDuringBootstrapping(t *testing.T) {
 	}
 }
 
+func TestAppRequestSync(t *testing.T) {
+	pastTime := time.Now()
+	engine := common.EngineTest{T: t}
+	engine.Default(false)
+	engine.ContextF = snow.DefaultConsensusContextTest
+	calledNotify := make(chan struct{}, 4)
+	engine.AppRequestF = func(nodeID ids.ShortID, requestID uint32, msg []byte) error {
+		// sleep for 3 seconds so the lock can be held for this period of time
+		time.Sleep(2 * time.Second)
+		calledNotify <- struct{}{}
+		return nil
+	}
+
+	handler := &Handler{}
+	msgFromVMChan := make(chan common.Message)
+	vdrs := validators.NewSet()
+	nodeID := ids.GenerateTestShortID()
+	err := vdrs.AddWeight(nodeID, 1)
+	assert.NoError(t, err)
+	metrics := prometheus.NewRegistry()
+	mc, err := message.NewCreator(metrics, true /*compressionEnabled*/, "dummyNamespace")
+	assert.NoError(t, err)
+	err = handler.Initialize(
+		mc,
+		&engine,
+		vdrs,
+		msgFromVMChan,
+	)
+	assert.NoError(t, err)
+
+	handler.clock.Set(pastTime)
+
+	reqID := uint32(1)
+	deadline := time.Nanosecond
+	chainID := ids.ID{}
+
+	for _, v := range [][]byte{[]byte("aaa"), []byte("bbb"), []byte("ccc"), []byte("ddd")} {
+		msg := mc.InboundAppRequest(chainID, reqID, deadline, v, nodeID)
+		handler.Push(msg)
+	}
+
+	go handler.Dispatch()
+
+	ticker := time.NewTicker(20 * time.Second)
+	defer ticker.Stop()
+
+	<-ticker.C
+
+	// All messages should have been attended to
+	// 4 messages were sent in total
+	assert.Equal(t, len(calledNotify), cap(calledNotify))
+}
+
 // Test that messages from the VM are handled
 func TestHandlerDispatchInternal(t *testing.T) {
 	engine := common.EngineTest{T: t}
