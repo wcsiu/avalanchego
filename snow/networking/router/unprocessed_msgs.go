@@ -121,7 +121,7 @@ func (u *unprocessedMsgsImpl) canPop(msg message.InboundMessage) bool {
 	}
 	// Every node has some allowed CPU allocation depending on
 	// the number of nodes with unprocessed messages.
-	baseMaxCPU := 1 / float64(len(u.nodeToUnprocessedMsgs))
+	baseMaxCPU := defaultThreadPoolSize / float64(len(u.nodeToUnprocessedMsgs))
 	nodeID := msg.NodeID()
 	weight, isVdr := u.vdrs.GetWeight(nodeID)
 	if !isVdr {
@@ -136,7 +136,7 @@ func (u *unprocessedMsgsImpl) canPop(msg message.InboundMessage) bool {
 	}
 	// Validators are allowed to use more CPU. More weight --> more CPU use allowed.
 	recentCPUUtilized := u.cpuTracker.Utilization(nodeID, u.clock.Time())
-	maxCPU := baseMaxCPU + (1.0-baseMaxCPU)*portionWeight
+	maxCPU := baseMaxCPU + (defaultThreadPoolSize-baseMaxCPU)*portionWeight
 	return recentCPUUtilized <= maxCPU
 }
 
