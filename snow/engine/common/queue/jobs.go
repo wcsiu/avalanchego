@@ -38,7 +38,7 @@ func New(
 	vdb := versiondb.New(db)
 	state, err := newState(vdb, metricsNamespace, metricsRegisterer)
 	if err != nil {
-		return nil, fmt.Errorf("couldn't create new jobs state: %s", err)
+		return nil, fmt.Errorf("couldn't create new jobs state: %w", err)
 	}
 
 	return &Jobs{
@@ -51,6 +51,9 @@ func New(
 func (j *Jobs) SetParser(parser Parser) error { j.state.parser = parser; return nil }
 
 func (j *Jobs) Has(jobID ids.ID) (bool, error) { return j.state.HasJob(jobID) }
+
+// Returns how many pending jobs are waiting in the queue.
+func (j *Jobs) PendingJobs() uint64 { return j.state.numPendingJobs }
 
 // Push adds a new job to the queue. Returns true if [job] was added to the queue and false
 // if [job] was already in the queue.
