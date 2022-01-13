@@ -18,7 +18,7 @@ var _ Client = &client{}
 type Client interface {
 	CreateUser(context.Context, api.UserPass) (bool, error)
 	// Returns the usernames of all keystore users
-	ListUsers(ctx context.Context) ([]string, error)
+	ListUsers(context.Context) ([]string, error)
 	// Returns the byte representation of the given user
 	ExportUser(context.Context, api.UserPass) ([]byte, error)
 	// Import [exportedUser] to [importTo]
