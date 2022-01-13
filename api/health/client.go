@@ -24,9 +24,9 @@ type Client interface {
 	Health(context.Context) (*APIHealthReply, error)
 	// Liveness returns if the node is in need of a restart
 	Liveness(context.Context) (*APIHealthReply, error)
-	// AwaitHealthy queries the Health endpoint [checks] times, with a pause of
-	// [interval] in between checks and returns early if Health returns healthy
-	AwaitHealthy(ctx context.Context, numChecks int, freq time.Duration) (bool, error)
+	// AwaitHealthy queries the Health endpoint with a pause of [interval]
+	// in between checks and returns early if Health returns healthy
+	AwaitHealthy(ctx context.Context, freq time.Duration) (bool, error)
 }
 
 // Client implementation for Avalanche Health API Endpoint
@@ -59,23 +59,17 @@ func (c *client) Liveness(ctx context.Context) (*APIHealthReply, error) {
 	return res, err
 }
 
-func (c *client) AwaitHealthy(ctx context.Context, numChecks int, freq time.Duration) (bool, error) {
-	if numChecks < 1 {
-		return false, errInvalidNumberOfChecks
-	}
-
-	// Check health once outside the loop to avoid sleeping unnecessarily.
-	res, err := c.Health(ctx)
-	if err == nil && res.Healthy {
-		return true, nil
-	}
-
-	for i := 1; i < numChecks; i++ {
-		time.Sleep(freq)
-		res, err = c.Health(ctx)
+func (c *client) AwaitHealthy(ctx context.Context, freq time.Duration) (bool, error) {
+	for {
+		res, err := c.Health(ctx)
 		if err == nil && res.Healthy {
 			return true, nil
 		}
+		time.Sleep(freq)
+
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		}
 	}
-	return false, err
 }
