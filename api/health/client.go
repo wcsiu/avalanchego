@@ -5,13 +5,10 @@ package health
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/ava-labs/avalanchego/utils/rpc"
 )
-
-var errInvalidNumberOfChecks = errors.New("expected at least 1 check attempt")
 
 // Interface compliance
 var _ Client = &client{}
