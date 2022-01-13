@@ -57,18 +57,12 @@ func (c *client) Liveness(ctx context.Context) (*APIHealthReply, error) {
 }
 
 func (c *client) AwaitHealthy(ctx context.Context, freq time.Duration) (bool, error) {
-	// Check health once outside the loop to avoid sleeping unnecessarily.
-	res, err := c.Health(ctx)
-	if err == nil && res.Healthy {
-		return true, nil
-	}
-
 	for ctx.Err() == nil {
-		time.Sleep(freq)
 		res, err := c.Health(ctx)
 		if err == nil && res.Healthy {
 			return true, nil
 		}
+		time.Sleep(freq)
 	}
 
 	return false, nil
