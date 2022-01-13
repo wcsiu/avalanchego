@@ -57,13 +57,14 @@ func (c *client) Liveness(ctx context.Context) (*APIHealthReply, error) {
 }
 
 func (c *client) AwaitHealthy(ctx context.Context, freq time.Duration) (bool, error) {
-	// Check health once outside the loop to avoid ticking unnecessarily.
+	// Check health once outside the loop to avoid waiting unnecessarily.
 	res, err := c.Health(ctx)
 	if err == nil && res.Healthy {
 		return true, nil
 	}
 
 	ticker := time.NewTicker(freq)
+	defer ticker.Stop()
 
 	for {
 		select {
