@@ -45,6 +45,8 @@ func (requester jsonRPCRequester) SendJSONRPCRequest(ctx context.Context, endpoi
 		return fmt.Errorf("problem while creating JSON RPC POST request to %s: %s", url, err)
 	}
 
+	req.Header.Set("Content-Type", "application/json")
+
 	resp, err := requester.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("problem while making JSON RPC POST request to %s: %w", url, err)
