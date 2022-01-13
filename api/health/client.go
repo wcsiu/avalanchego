@@ -4,6 +4,7 @@
 package health
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -18,10 +19,10 @@ var _ Client = &client{}
 // Client interface for Avalanche Health API Endpoint
 type Client interface {
 	// Health returns a health check on the Avalanche node
-	Health() (*APIHealthClientReply, error)
+	Health(ctx context.Context) (*APIHealthClientReply, error)
 	// AwaitHealthy queries the Health endpoint [checks] times, with a pause of
 	// [interval] in between checks and returns early if Health returns healthy
-	AwaitHealthy(numChecks int, freq time.Duration) (bool, error)
+	AwaitHealthy(ctx context.Context, numChecks int, freq time.Duration) (bool, error)
 }
 
 // Client implementation for Avalanche Health API Endpoint
@@ -55,32 +56,32 @@ type APIHealthClientReply struct {
 }
 
 // NewClient returns a client to interact with Health API endpoint
-func NewClient(uri string, requestTimeout time.Duration) Client {
+func NewClient(uri string) Client {
 	return &client{
-		requester: rpc.NewEndpointRequester(uri, "/ext/health", "health", requestTimeout),
+		requester: rpc.NewEndpointRequester(uri, "/ext/health", "health"),
 	}
 }
 
-func (c *client) Health() (*APIHealthClientReply, error) {
+func (c *client) Health(ctx context.Context) (*APIHealthClientReply, error) {
 	res := &APIHealthClientReply{}
-	err := c.requester.SendRequest("health", struct{}{}, res)
+	err := c.requester.SendRequest(ctx, "health", struct{}{}, res)
 	return res, err
 }
 
-func (c *client) AwaitHealthy(numChecks int, freq time.Duration) (bool, error) {
+func (c *client) AwaitHealthy(ctx context.Context, numChecks int, freq time.Duration) (bool, error) {
 	if numChecks < 1 {
 		return false, errInvalidNumberOfChecks
 	}
 
 	// Check health once outside the loop to avoid sleeping unnecessarily.
-	res, err := c.Health()
+	res, err := c.Health(ctx)
 	if err == nil && res.Healthy {
 		return true, nil
 	}
 
 	for i := 1; i < numChecks; i++ {
 		time.Sleep(freq)
-		res, err = c.Health()
+		res, err = c.Health(ctx)
 		if err == nil && res.Healthy {
 			return true, nil
 		}
