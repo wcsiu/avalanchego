@@ -58,13 +58,12 @@ func (c *client) Liveness(ctx context.Context) (*APIHealthReply, error) {
 
 func (c *client) AwaitHealthy(ctx context.Context, freq time.Duration) (bool, error) {
 	for {
-		res, err := c.Health(ctx)
-		if err == nil && res.Healthy {
-			return true, nil
-		}
-		time.Sleep(freq)
-
 		select {
+		case <-time.After(freq):
+			res, err := c.Health(ctx)
+			if err == nil && res.Healthy {
+				return true, nil
+			}
 		case <-ctx.Done():
 			return false, ctx.Err()
 		}
