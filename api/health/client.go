@@ -19,11 +19,11 @@ var _ Client = &client{}
 // Client interface for Avalanche Health API Endpoint
 type Client interface {
 	// Readiness returns if the node has finished initialization
-	Readiness(ctx context.Context) (*APIHealthReply, error)
+	Readiness(context.Context) (*APIHealthReply, error)
 	// Health returns a summation of the health of the node
-	Health(ctx context.Context) (*APIHealthReply, error)
+	Health(context.Context) (*APIHealthReply, error)
 	// Liveness returns if the node is in need of a restart
-	Liveness(ctx context.Context) (*APIHealthReply, error)
+	Liveness(context.Context) (*APIHealthReply, error)
 	// AwaitHealthy queries the Health endpoint [checks] times, with a pause of
 	// [interval] in between checks and returns early if Health returns healthy
 	AwaitHealthy(ctx context.Context, numChecks int, freq time.Duration) (bool, error)
