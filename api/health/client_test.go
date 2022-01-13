@@ -64,8 +64,9 @@ func TestClient(t *testing.T) {
 	}
 
 	{
-		gctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
-		healthy, err := c.AwaitHealthy(gctx, time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		healthy, err := c.AwaitHealthy(ctx, time.Second)
+		cancel()
 		assert.NoError(err)
 		assert.True(healthy)
 	}
@@ -73,9 +74,10 @@ func TestClient(t *testing.T) {
 	mc.reply.Healthy = false
 
 	{
-		gctx, _ := context.WithTimeout(context.Background(), 20*time.Microsecond)
-		healthy, err := c.AwaitHealthy(gctx, time.Microsecond)
-		assert.NoError(err)
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Microsecond)
+		healthy, err := c.AwaitHealthy(ctx, time.Microsecond)
+		cancel()
+		assert.Error(err)
 		assert.False(healthy)
 	}
 
