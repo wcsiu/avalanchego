@@ -10,12 +10,10 @@ import (
 )
 
 // BlockServer represents all requests heightIndexer can issue
-// against ProposerVM. All methods must be thread-safe.
+// against PlatformVM. All methods must be thread-safe.
 type BlockServer interface {
-	LastAcceptedWrappingBlkID() (ids.ID, error)
-	LastAcceptedInnerBlkID() (ids.ID, error)
-	GetWrappingBlk(blkID ids.ID) (WrappingBlock, error)
-	GetInnerBlk(id ids.ID) (snowman.Block, error)
+	LastAcceptedBlkID() ids.ID
+	GetBlk(blkID ids.ID) (snowman.Block, error)
 }
 
 // heightIndexDBOps groups all the operations that indexer

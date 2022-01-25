@@ -8,6 +8,7 @@ import (
 
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/database/prefixdb"
+	heightIndex "github.com/ava-labs/avalanchego/vms/components/block_height_index"
 )
 
 var (
@@ -19,13 +20,13 @@ var (
 type State interface {
 	ChainState
 	BlockState
-	HeightIndex
+	heightIndex.Index
 }
 
 type state struct {
 	ChainState
 	BlockState
-	HeightIndex
+	heightIndex.Index
 }
 
 func New(db database.Database) State {
@@ -33,9 +34,9 @@ func New(db database.Database) State {
 	blockDB := prefixdb.New(blockStatePrefix, db)
 	heightIndexDB := prefixdb.New(heightIndexPrefix, db)
 	return &state{
-		ChainState:  NewChainState(chainDB),
-		BlockState:  NewBlockState(blockDB),
-		HeightIndex: NewHeightIndex(heightIndexDB),
+		ChainState: NewChainState(chainDB),
+		BlockState: NewBlockState(blockDB),
+		Index:      heightIndex.New(heightIndexDB),
 	}
 }
 
@@ -50,14 +51,14 @@ func NewMetered(db database.Database, namespace string, metrics prometheus.Regis
 	}
 
 	return &state{
-		ChainState:  NewChainState(chainDB),
-		BlockState:  blockState,
-		HeightIndex: NewHeightIndex(heightIndexDB),
+		ChainState: NewChainState(chainDB),
+		BlockState: blockState,
+		Index:      heightIndex.New(heightIndexDB),
 	}, nil
 }
 
 func (s *state) clearCache() {
 	s.ChainState.clearCache()
 	s.BlockState.clearCache()
-	s.HeightIndex.clearCache()
+	s.Index.ClearCache()
 }

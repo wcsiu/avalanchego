@@ -238,6 +238,9 @@ func (b *CommonBlock) Accept() error {
 	b.vm.internalState.SetLastAccepted(blkID)
 	b.vm.internalState.SetHeight(b.Hght)
 	b.vm.lastAcceptedID = blkID
+	if err := b.vm.updateHeightIndex(b.Hght, blkID); err != nil {
+		return err
+	}
 	return b.vm.metrics.AcceptBlock(b.self)
 }
 

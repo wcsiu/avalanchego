@@ -15,7 +15,7 @@ import (
 	"github.com/ava-labs/avalanchego/snow/consensus/snowman"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/version"
-	"github.com/ava-labs/avalanchego/vms/proposervm/state"
+	heightIndex "github.com/ava-labs/avalanchego/vms/components/block_height_index"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -106,7 +106,7 @@ func TestHeightBlockIndexPostFork(t *testing.T) {
 	}
 
 	dbMan := manager.NewMemDB(version.DefaultVersion1_0_0)
-	storedState := state.NewHeightIndex(dbMan.Current().Database)
+	storedState := heightIndex.New(dbMan.Current().Database)
 	hIndex := newHeightIndexer(blkSrv,
 		logging.NoLog{},
 		storedState,
@@ -198,7 +198,7 @@ func TestHeightBlockIndexPreFork(t *testing.T) {
 	}
 
 	dbMan := manager.NewMemDB(version.DefaultVersion1_0_0)
-	storedState := state.NewHeightIndex(dbMan.Current().Database)
+	storedState := heightIndex.New(dbMan.Current().Database)
 	hIndex := newHeightIndexer(blkSrv,
 		logging.NoLog{},
 		storedState,
@@ -311,7 +311,7 @@ func TestHeightBlockIndexAcrossFork(t *testing.T) {
 	}
 
 	dbMan := manager.NewMemDB(version.DefaultVersion1_0_0)
-	storedState := state.NewHeightIndex(dbMan.Current().Database)
+	storedState := heightIndex.New(dbMan.Current().Database)
 	hIndex := newHeightIndexer(blkSrv,
 		logging.NoLog{},
 		storedState,
@@ -446,7 +446,7 @@ func TestHeightBlockIndexResumeFromCheckPoint(t *testing.T) {
 	}
 
 	dbMan := manager.NewMemDB(version.DefaultVersion1_0_0)
-	storedState := state.NewHeightIndex(dbMan.Current().Database)
+	storedState := heightIndex.New(dbMan.Current().Database)
 	hIndex := newHeightIndexer(blkSrv,
 		logging.NoLog{},
 		storedState,

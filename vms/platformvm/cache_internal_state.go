@@ -26,6 +26,7 @@ import (
 	"github.com/ava-labs/avalanchego/vms/platformvm/status"
 
 	safemath "github.com/ava-labs/avalanchego/utils/math"
+	heightIndex "github.com/ava-labs/avalanchego/vms/components/block_height_index"
 )
 
 var (
@@ -42,6 +43,7 @@ var (
 	utxoPrefix            = []byte("utxo")
 	subnetPrefix          = []byte("subnet")
 	chainPrefix           = []byte("chain")
+	heightIndexPrefix     = []byte("heightBlk")
 	singletonPrefix       = []byte("singleton")
 
 	timestampKey     = []byte("timestamp")
@@ -92,6 +94,8 @@ type InternalState interface {
 
 	GetBlock(blockID ids.ID) (Block, error)
 	AddBlock(block Block)
+
+	heightIndex.Index
 
 	Abort()
 	Commit() error
@@ -210,6 +214,8 @@ type internalStateImpl struct {
 	chainDBCache cache.Cacher     // cache of subnetID -> linkedDB
 	chainDB      database.Database
 
+	heightIndex.Index
+
 	originalTimestamp, timestamp         time.Time
 	originalCurrentSupply, currentSupply uint64
 	originalLastAccepted, lastAccepted   ids.ID
@@ -256,6 +262,9 @@ func newInternalStateDatabases(vm *VM, db database.Database) *internalStateImpl 
 	rewardUTXODB := prefixdb.New(rewardUTXOsPrefix, baseDB)
 	utxoDB := prefixdb.New(utxoPrefix, baseDB)
 	subnetBaseDB := prefixdb.New(subnetPrefix, baseDB)
+
+	heightIndexDB := prefixdb.New(heightIndexPrefix, db)
+
 	return &internalStateImpl{
 		vm: vm,
 
@@ -298,6 +307,8 @@ func newInternalStateDatabases(vm *VM, db database.Database) *internalStateImpl 
 
 		addedChains: make(map[ids.ID][]*Tx),
 		chainDB:     prefixdb.New(chainPrefix, baseDB),
+
+		Index: heightIndex.New(heightIndexDB),
 
 		singletonDB: prefixdb.New(singletonPrefix, baseDB),
 	}

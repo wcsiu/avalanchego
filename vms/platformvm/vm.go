@@ -35,6 +35,7 @@ import (
 	"github.com/ava-labs/avalanchego/utils/wrappers"
 	"github.com/ava-labs/avalanchego/version"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
+	"github.com/ava-labs/avalanchego/vms/platformvm/indexer"
 	"github.com/ava-labs/avalanchego/vms/platformvm/reward"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 
@@ -60,10 +61,11 @@ var (
 	errStartAfterEndTime = errors.New("start time is after the end time")
 	errWrongCacheType    = errors.New("unexpectedly cached type")
 
-	_ block.ChainVM        = &VM{}
-	_ validators.Connector = &VM{}
-	_ secp256k1fx.VM       = &VM{}
-	_ Fx                   = &secp256k1fx.Fx{}
+	_ block.ChainVM              = &VM{}
+	_ block.HeightIndexedChainVM = &VM{}
+	_ validators.Connector       = &VM{}
+	_ secp256k1fx.VM             = &VM{}
+	_ Fx                         = &secp256k1fx.Fx{}
 )
 
 // VM implements the snowman.ChainVM interface
@@ -94,6 +96,8 @@ type VM struct {
 	toEngine chan<- common.Message
 
 	internalState InternalState
+
+	indexer.HeightIndexer
 
 	// ID of the preferred block
 	preferred ids.ID
@@ -209,7 +213,19 @@ func (vm *VM) Initialize(
 	ctx.Log.Info("initializing last accepted block as %s", vm.lastAcceptedID)
 
 	// Build off the most recently accepted block
-	return vm.SetPreference(vm.lastAcceptedID)
+	if err := vm.SetPreference(vm.lastAcceptedID); err != nil {
+		return err
+	}
+
+	vm.HeightIndexer = indexer.NewHeightIndexer(vm, vm.ctx.Log, vm.internalState)
+	go func() {
+		if err := vm.HeightIndexer.RepairHeightIndex(); err != nil {
+			vm.ctx.Log.Error("Block indexing by height: failed with error %s", err)
+			return
+		}
+	}()
+
+	return nil
 }
 
 // Create all chains that exist that this node validates.

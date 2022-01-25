@@ -20,6 +20,9 @@ import (
 )
 
 var (
+	_ AddressTxsIndexer = &indexer{}
+	_ AddressTxsIndexer = &noIndexer{}
+
 	idxKey                         = []byte("idx")
 	idxCompleteKey                 = []byte("complete")
 	errIndexingRequiredFromGenesis = errors.New("running would create incomplete index. Allow incomplete indices or re-sync from genesis with indexing enabled")
