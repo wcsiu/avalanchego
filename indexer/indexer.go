@@ -171,7 +171,7 @@ func (i *indexer) initializeIndexes(name string, engine common.Engine) error {
 	// they may be incomplete and are enabled only on nodes which specify the flag <index-enabled>.
 	// VM-backed indexes do not require an ad-hoc db; they leverage VM-storage and cannot be incomplete.
 	// VM-backed indexes are supported only for block indexing on Snowman++ VMs which enabled height indexing.
-	// Currently VM-backed indexes are available only for the C-chain index.
+	// Currently VM-backed indexes are available only for Snowman chains indexes.
 
 	chainID := engine.Context().ChainID
 	switch engine.(type) {
