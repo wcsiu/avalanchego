@@ -4,7 +4,6 @@
 package handler
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -28,11 +27,7 @@ const (
 	numDispatchersToClose = 3
 )
 
-var (
-	_ Handler = &handler{}
-
-	errGearsNotRegistered = errors.New("no handler gear registered")
-)
+var _ Handler = &handler{}
 
 type Handler interface {
 	common.Timer
@@ -40,16 +35,15 @@ type Handler interface {
 	Context() *snow.ConsensusContext
 	IsValidator(nodeID ids.ShortID) bool
 
-	SetBootstrapper(engine common.Engine)
-	Bootstrapper() common.Engine
+	SetBootstrapper(engine common.BootstrapableEngine)
+	Bootstrapper() common.BootstrapableEngine
 
 	SetConsensus(engine common.Engine)
 	Consensus() common.Engine
 
 	SetOnStopped(onStopped func())
 
-	StartDispatching(recoverPanic bool)
-	StartChain() error
+	Start(recoverPanic bool)
 	Push(msg message.InboundMessage)
 	Stop()
 	StopWithError(err error)
@@ -73,7 +67,7 @@ type handler struct {
 	preemptTimeouts chan struct{}
 	gossipFrequency time.Duration
 
-	bootstrapper common.Engine
+	bootstrapper common.BootstrapableEngine
 	engine       common.Engine
 	// onStopped is called in a goroutine when this handler finishes shutting
 	// down. If it is nil then it is skipped.
@@ -148,15 +142,32 @@ func (h *handler) IsValidator(nodeID ids.ShortID) bool {
 		h.validators.Contains(nodeID)
 }
 
-func (h *handler) SetBootstrapper(engine common.Engine) { h.bootstrapper = engine }
-func (h *handler) Bootstrapper() common.Engine          { return h.bootstrapper }
+// updateState update node state as reported in context
+func (h *handler) updateState() {
+	switch {
+	case h.bootstrapper != nil:
+		h.ctx.SetState(snow.Bootstrapping)
+	case h.engine != nil:
+		h.ctx.SetState(snow.NormalOp)
+	default:
+	}
+}
 
-func (h *handler) SetConsensus(engine common.Engine) { h.engine = engine }
-func (h *handler) Consensus() common.Engine          { return h.engine }
+func (h *handler) SetBootstrapper(engine common.BootstrapableEngine) {
+	h.bootstrapper = engine
+	h.updateState()
+}
+func (h *handler) Bootstrapper() common.BootstrapableEngine { return h.bootstrapper }
+
+func (h *handler) SetConsensus(engine common.Engine) {
+	h.engine = engine
+	h.updateState()
+}
+func (h *handler) Consensus() common.Engine { return h.engine }
 
 func (h *handler) SetOnStopped(onStopped func()) { h.onStopped = onStopped }
 
-func (h *handler) StartDispatching(recoverPanic bool) {
+func (h *handler) Start(recoverPanic bool) {
 	if recoverPanic {
 		go h.ctx.Log.RecoverAndExit(h.dispatchSync, func() {
 			h.ctx.Log.Error("chain was shutdown due to a panic in the sync dispatcher")
@@ -171,16 +182,6 @@ func (h *handler) StartDispatching(recoverPanic bool) {
 		go h.ctx.Log.RecoverAndPanic(h.dispatchSync)
 		go h.ctx.Log.RecoverAndPanic(h.dispatchAsync)
 		go h.ctx.Log.RecoverAndPanic(h.dispatchChans)
-	}
-}
-
-func (h *handler) StartChain() error {
-	startReqID := uint32(0)
-	switch {
-	case h.bootstrapper != nil:
-		return h.bootstrapper.Start(startReqID)
-	default:
-		return errGearsNotRegistered
 	}
 }
 
@@ -303,11 +304,6 @@ func (h *handler) dispatchChans() {
 			msg = h.mc.InternalVMMessage(h.ctx.NodeID, uint32(vmMSG))
 
 		case <-gossiper.C:
-			if h.ctx.GetState() != snow.NormalOp {
-				// Shouldn't send gossiping messages while the chain is
-				// bootstrapping.
-				continue
-			}
 			msg = h.mc.InternalGossipRequest(h.ctx.NodeID)
 
 		case <-h.timeouts:
