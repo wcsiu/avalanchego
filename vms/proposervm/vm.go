@@ -128,10 +128,14 @@ func (vm *VM) Initialize(
 	}
 
 	if innerHVM, ok := vm.ChainVM.(block.HeightIndexedChainVM); ok {
-		if !innerHVM.IsHeightIndexComplete() {
-			vm.ctx.Log.Info("Block indexing by height: repairing height index not started since innerVM index is incomplete.")
-		} else {
+		if innerHVM.IsHeightIndexingEnabled() {
 			go func() {
+				// poll till index is complete
+				for innerHVM.IsHeightIndexComplete() {
+					time.Sleep(10 * time.Second)
+				}
+
+				// finally repair index
 				if err := vm.hIndexer.RepairHeightIndex(); err != nil {
 					vm.ctx.Log.Error("Block indexing by height: failed with error %s", err)
 					return

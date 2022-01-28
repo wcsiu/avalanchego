@@ -238,7 +238,7 @@ func (hi *heightIndexer) doRepair(repairStartBlkID ids.ID) error {
 			// accepting a new block.
 
 			// delete checkpoint
-			if err := hi.batch.Delete(state.GetCheckpointKey()); err != nil {
+			if err := hi.batch.Delete(heightIndex.GetCheckpointKey()); err != nil {
 				return err
 			}
 			hi.jobDone.SetValue(true)

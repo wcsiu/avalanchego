@@ -6,6 +6,7 @@ package proposervm
 import (
 	"errors"
 
+	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/engine/snowman/block"
 )
@@ -25,22 +26,13 @@ func (vm *VM) IsHeightIndexingEnabled() bool {
 // IsHeightIndexComplete implements HeightIndexedChainVM interface
 // vm.ctx.Lock should be held
 func (vm *VM) IsHeightIndexComplete() bool {
-	innerHVM, ok := vm.ChainVM.(block.HeightIndexedChainVM)
-	if !ok || !innerHVM.IsHeightIndexComplete() {
-		return false
-	}
-
 	return vm.hIndexer.IsRepaired()
 }
 
 // GetBlockIDByHeight implements HeightIndexedChainVM interface
 // vm.ctx.Lock should be held
 func (vm *VM) GetBlockIDByHeight(height uint64) (ids.ID, error) {
-	innerHVM, ok := vm.ChainVM.(block.HeightIndexedChainVM)
-	if !ok {
-		return ids.Empty, block.ErrHeightIndexedVMNotImplemented
-	}
-	if !innerHVM.IsHeightIndexComplete() {
+	if !vm.hIndexer.IsRepaired() {
 		return ids.Empty, errIndexIncomplete
 	}
 
@@ -51,6 +43,7 @@ func (vm *VM) GetBlockIDByHeight(height uint64) (ids.ID, error) {
 	}
 
 	if height < forkHeight {
+		innerHVM, _ := vm.ChainVM.(block.HeightIndexedChainVM)
 		return innerHVM.GetBlockIDByHeight(height)
 	}
 
@@ -63,11 +56,28 @@ func (vm *VM) GetBlockIDByHeight(height uint64) (ids.ID, error) {
 // updateHeightIndex should not be called for preFork blocks. Moreover
 // vm.ctx.Lock should be held
 func (vm *VM) updateHeightIndex(height uint64, blkID ids.ID) error {
-	innerHVM, ok := vm.ChainVM.(block.HeightIndexedChainVM)
-	if !ok || !innerHVM.IsHeightIndexComplete() {
-		return nil // nothing to do
-	}
+	checkpoint, err := vm.State.GetCheckpoint()
+	switch err {
+	case nil:
+		// index rebuilding is ongoing. We can update the index,
+		// stepping away from checkpointed blk, which will be handled by indexer.
+		if blkID != checkpoint {
+			return vm.storeHeightEntry(height, blkID)
+		}
 
+	case database.ErrNotFound:
+		// no checkpoint means indexing is not started or is already done
+		if vm.hIndexer.IsRepaired() {
+			return vm.storeHeightEntry(height, blkID)
+		}
+
+	default:
+		return err
+	}
+	return nil
+}
+
+func (vm *VM) storeHeightEntry(height uint64, blkID ids.ID) error {
 	forkHeight, err := vm.State.GetForkHeight()
 	if err != nil {
 		vm.ctx.Log.Warn("Block indexing by height: new block. Could not load fork height %v", err)
