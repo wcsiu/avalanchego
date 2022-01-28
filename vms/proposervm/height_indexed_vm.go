@@ -12,7 +12,17 @@ import (
 
 var errIndexIncomplete = errors.New("query failed because height index is incomplete")
 
-// HeightIndexingEnabled implements HeightIndexedChainVM interface
+// IsEnabled implements HeightIndexedChainVM interface
+// vm.ctx.Lock should be held
+func (vm *VM) IsHeightIndexingEnabled() bool {
+	innerHVM, ok := vm.ChainVM.(block.HeightIndexedChainVM)
+	if !ok {
+		return false
+	}
+	return innerHVM.IsHeightIndexingEnabled()
+}
+
+// IsHeightIndexComplete implements HeightIndexedChainVM interface
 // vm.ctx.Lock should be held
 func (vm *VM) IsHeightIndexComplete() bool {
 	innerHVM, ok := vm.ChainVM.(block.HeightIndexedChainVM)

@@ -11,7 +11,13 @@ import (
 
 var errIndexIncomplete = errors.New("query failed because height index is incomplete")
 
-// HeightIndexingEnabled implements HeightIndexedChainVM interface
+// IsEnabled implements HeightIndexedChainVM interface
+// vm.ctx.Lock should be held
+func (vm *VM) IsHeightIndexingEnabled() bool {
+	return true
+}
+
+// IsHeightIndexComplete implements HeightIndexedChainVM interface
 // vm.ctx.Lock should be held
 func (vm *VM) IsHeightIndexComplete() bool {
 	return vm.HeightIndexer.IsRepaired()
