@@ -192,7 +192,6 @@ func (vm *VM) Initialize(
 ) error {
 	vm.ctx = ctx
 	rawDB := ADatabase{dbManager.Current().Database, ctx.ChainID.String(), &stat{}, &stat{}}
-	go rawDB.DBUsageLogger(vm.context, os.Stderr)
 	prefixDB := prefixdb.New(dbPrefix, rawDB)
 	vm.db = versiondb.New(prefixDB)
 	vm.State = state.New(vm.db)
@@ -215,6 +214,7 @@ func (vm *VM) Initialize(
 	context, cancel := context.WithCancel(context.Background())
 	vm.context = context
 	vm.onShutdown = cancel
+	go rawDB.DBUsageLogger(vm.context, os.Stderr)
 
 	err := vm.ChainVM.Initialize(
 		ctx,
