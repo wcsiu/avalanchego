@@ -5,6 +5,9 @@ package proposervm
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"sync"
 	"time"
 
 	"github.com/ava-labs/avalanchego/database"
@@ -25,6 +28,9 @@ import (
 	"github.com/ava-labs/avalanchego/vms/proposervm/scheduler"
 	"github.com/ava-labs/avalanchego/vms/proposervm/state"
 	"github.com/ava-labs/avalanchego/vms/proposervm/tree"
+	"github.com/olekukonko/tablewriter"
+
+	ecommon "github.com/ethereum/go-ethereum/common"
 
 	statelessblock "github.com/ava-labs/avalanchego/vms/proposervm/block"
 )
@@ -94,6 +100,86 @@ func New(
 	return proVM
 }
 
+type counter uint64
+
+func (c counter) String() string {
+	return fmt.Sprintf("%d", c)
+}
+
+func (c counter) Percentage(current uint64) string {
+	return fmt.Sprintf("%d", current*100/uint64(c))
+}
+
+// stat stores sizes and count for a parameter
+type stat struct {
+	size  ecommon.StorageSize
+	count counter
+	l     sync.RWMutex
+}
+
+// Add size to the stat and increase the counter by 1
+func (s *stat) Add(size ecommon.StorageSize) {
+	s.l.Lock()
+	defer s.l.Unlock()
+	s.size += size
+	s.count++
+}
+
+func (s *stat) AddBytes(b []byte) {
+	s.Add(ecommon.StorageSize(len(b)))
+}
+
+func (s *stat) Size() string {
+	s.l.RLock()
+	defer s.l.RUnlock()
+	return s.size.String()
+}
+
+func (s *stat) Count() string {
+	s.l.RLock()
+	defer s.l.RUnlock()
+	return s.count.String()
+}
+
+func (a ADatabase) DBUsageLogger(ctx context.Context, f *os.File) {
+	t := time.NewTicker(10 * time.Second)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			// Display the database statistic.
+			stats := [][]string{
+				{a.chainID, "GET", a.get.Size(), a.get.Count()},
+				{a.chainID, "PUT", a.put.Size(), a.put.Count()},
+			}
+			table := tablewriter.NewWriter(f)
+			table.SetHeader([]string{"Chain", "Op", "Size", "Items"})
+			table.AppendBulk(stats)
+			table.Render()
+		}
+	}
+}
+
+type ADatabase struct {
+	database.Database
+
+	chainID string
+	get     *stat
+	put     *stat
+}
+
+func (a ADatabase) Put(k []byte, v []byte) error {
+	a.put.AddBytes(v)
+	return a.Database.Put(k, v)
+}
+
+func (a ADatabase) Get(k []byte) ([]byte, error) {
+	dat, err := a.Database.Get(k)
+	a.get.AddBytes(dat)
+	return dat, err
+}
+
 func (vm *VM) Initialize(
 	ctx *snow.Context,
 	dbManager manager.Manager,
@@ -105,7 +191,8 @@ func (vm *VM) Initialize(
 	appSender common.AppSender,
 ) error {
 	vm.ctx = ctx
-	rawDB := dbManager.Current().Database
+	rawDB := ADatabase{dbManager.Current().Database, ctx.ChainID.String(), &stat{}, &stat{}}
+	go rawDB.DBUsageLogger(vm.context, os.Stderr)
 	prefixDB := prefixdb.New(dbPrefix, rawDB)
 	vm.db = versiondb.New(prefixDB)
 	vm.State = state.New(vm.db)
