@@ -191,8 +191,8 @@ func (vm *VM) Initialize(
 	appSender common.AppSender,
 ) error {
 	vm.ctx = ctx
-	rawDB := ADatabase{dbManager.Current().Database, ctx.ChainID.String(), &stat{}, &stat{}}
-	prefixDB := prefixdb.New(dbPrefix, rawDB)
+	rawDB := dbManager.Current().Database
+	prefixDB := ADatabase{prefixdb.New(dbPrefix, rawDB), ctx.ChainID.String(), &stat{}, &stat{}}
 	vm.db = versiondb.New(prefixDB)
 	vm.State = state.New(vm.db)
 	vm.Windower = proposer.New(ctx.ValidatorState, ctx.SubnetID, ctx.ChainID)
@@ -214,7 +214,7 @@ func (vm *VM) Initialize(
 	context, cancel := context.WithCancel(context.Background())
 	vm.context = context
 	vm.onShutdown = cancel
-	go rawDB.DBUsageLogger(vm.context, os.Stderr)
+	go prefixDB.DBUsageLogger(vm.context, os.Stderr)
 
 	err := vm.ChainVM.Initialize(
 		ctx,
