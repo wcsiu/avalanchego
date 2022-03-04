@@ -143,11 +143,13 @@ func (s *stat) Count() string {
 
 func (a ADatabase) DBUsageLogger(ctx context.Context, f *os.File) {
 	t := time.NewTicker(10 * time.Second)
+	elapsed := time.Duration(0)
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
+			elapsed += 10 * time.Second
 			// Display the database statistic.
 			stats := [][]string{
 				{a.chainID, "GET", a.get.Size(), a.get.Count()},
@@ -155,6 +157,7 @@ func (a ADatabase) DBUsageLogger(ctx context.Context, f *os.File) {
 			}
 			table := tablewriter.NewWriter(f)
 			table.SetHeader([]string{"Chain", "Op", "Size", "Items"})
+			table.SetFooter([]string{"Elapsed", elapsed.String(), " ", " "})
 			table.AppendBulk(stats)
 			table.Render()
 		}
@@ -297,7 +300,7 @@ func (vm *VM) Initialize(
 			vm.ctx.Log.Error("could not verify the status of height indexing: %s", err)
 			return
 		}
-		if !shouldRepair {
+		if true || !shouldRepair {
 			vm.ctx.Log.Info("block height indexing is already complete")
 			vm.hIndexer.MarkRepaired()
 			return
