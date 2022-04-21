@@ -130,12 +130,12 @@ func (b *bootstrapper) Ancestors(vdr ids.ShortID, requestID uint32, blks [][]byt
 
 	blocks, err := block.BatchedParseBlock(b.VM, blks)
 	if err != nil { // the provided blocks couldn't be parsed
-		b.Ctx.Log.Debug("failed to parse blocks in Ancestors from %s with ID %d", vdr, requestID)
+		b.Ctx.Log.Debug("failed to parse blocks in Ancestors from %s with ID %d: %s", vdr, requestID, err)
 		return b.fetch(wantedBlkID)
 	}
 
 	if len(blocks) == 0 {
-		b.Ctx.Log.Debug("parsing blocks returned an empty set of blocks from %s with ID %d", vdr, requestID)
+		b.Ctx.Log.Debug("parsing blocks returned an empty set of blocks from %s with ID %d: %s", vdr, requestID, err)
 		return b.fetch(wantedBlkID)
 	}
 
