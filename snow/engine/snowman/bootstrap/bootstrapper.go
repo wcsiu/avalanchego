@@ -135,7 +135,7 @@ func (b *bootstrapper) Ancestors(vdr ids.ShortID, requestID uint32, blks [][]byt
 	}
 
 	if len(blocks) == 0 {
-		b.Ctx.Log.Debug("parsing blocks returned an empty set of blocks from %s with ID %d: %s", vdr, requestID, err)
+		b.Ctx.Log.Debug("parsing blocks returned an empty set of blocks from %s with ID %d", vdr, requestID)
 		return b.fetch(wantedBlkID)
 	}
 
