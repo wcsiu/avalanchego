@@ -179,11 +179,6 @@ func Start(
 
 	p.trackedSubnets.Add(constants.PrimaryNetworkID)
 
-	// Make sure that the version is the first message sent
-	msg, err := p.Network.Version()
-	p.Log.AssertNoError(err)
-	p.Send(p.onClosingCtx, msg)
-
 	go p.readMessages()
 	go p.writeMessages()
 	go p.sendPings()
@@ -424,7 +419,14 @@ func (p *peer) writeMessages() {
 	}()
 
 	writer := bufio.NewWriterSize(p.conn, p.Config.WriteBufferSize)
-	for { // When this loop exits, p.sendQueueCond.L is unlocked
+
+	// Make sure that the version is the first message sent
+	msg, err := p.Network.Version()
+	p.Log.AssertNoError(err)
+
+	p.writeMessage(writer, msg)
+
+	for {
 		msg, ok := p.messageQueue.PopWithoutBlocking()
 		if !ok {
 			// Make sure the peer was fully sent all prior messages before
@@ -443,38 +445,42 @@ func (p *peer) writeMessages() {
 			}
 		}
 
-		msgBytes := msg.Bytes()
-		p.Log.Verbo(
-			"sending message to %s:\n%s",
-			p.id, formatting.DumpBytes(msgBytes),
-		)
-
-		msgLen := uint32(len(msgBytes))
-		msgLenBytes := [wrappers.IntLen]byte{}
-		binary.BigEndian.PutUint32(msgLenBytes[:], msgLen)
-
-		if err := p.conn.SetWriteDeadline(p.nextTimeout()); err != nil {
-			p.Log.Verbo(
-				"error setting write deadline to %s due to: %s",
-				p.id, err,
-			)
-			msg.DecRef()
-			return
-		}
-
-		// Write the message
-		var buf net.Buffers = [][]byte{msgLenBytes[:], msgBytes}
-		if _, err := io.CopyN(writer, &buf, int64(wrappers.IntLen+msgLen)); err != nil {
-			p.Log.Verbo("error writing to %s: %s", p.id, err)
-			msg.DecRef()
-			return
-		}
-
-		now := p.Clock.Time().Unix()
-		atomic.StoreInt64(&p.Config.LastSent, now)
-		atomic.StoreInt64(&p.lastSent, now)
-		p.Metrics.Sent(msg)
+		p.writeMessage(writer, msg)
 	}
+}
+
+func (p *peer) writeMessage(writer io.Writer, msg message.OutboundMessage) {
+	msgBytes := msg.Bytes()
+	p.Log.Verbo(
+		"sending message to %s:\n%s",
+		p.id, formatting.DumpBytes(msgBytes),
+	)
+
+	msgLen := uint32(len(msgBytes))
+	msgLenBytes := [wrappers.IntLen]byte{}
+	binary.BigEndian.PutUint32(msgLenBytes[:], msgLen)
+
+	if err := p.conn.SetWriteDeadline(p.nextTimeout()); err != nil {
+		p.Log.Verbo(
+			"error setting write deadline to %s due to: %s",
+			p.id, err,
+		)
+		msg.DecRef()
+		return
+	}
+
+	// Write the message
+	var buf net.Buffers = [][]byte{msgLenBytes[:], msgBytes}
+	if _, err := io.CopyN(writer, &buf, int64(wrappers.IntLen+msgLen)); err != nil {
+		p.Log.Verbo("error writing to %s: %s", p.id, err)
+		msg.DecRef()
+		return
+	}
+
+	now := p.Clock.Time().Unix()
+	atomic.StoreInt64(&p.Config.LastSent, now)
+	atomic.StoreInt64(&p.lastSent, now)
+	p.Metrics.Sent(msg)
 }
 
 func (p *peer) sendPings() {
