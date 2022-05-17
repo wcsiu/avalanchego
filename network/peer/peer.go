@@ -109,7 +109,7 @@ type peer struct {
 	// node ID of this peer.
 	id ids.NodeID
 
-	// queue of messages for this peer to send.
+	// queue of messages to send to this peer.
 	messageQueue MessageQueue
 
 	// ip is the claimed IP the peer gave us in the Version message.
@@ -428,21 +428,25 @@ func (p *peer) writeMessages() {
 
 	for {
 		msg, ok := p.messageQueue.PopWithoutBlocking()
+		if ok {
+			p.writeMessage(writer, msg)
+			continue
+		}
+
+		// Make sure the peer was fully sent all prior messages before
+		// blocking.
+		if err := writer.Flush(); err != nil {
+			p.Log.Verbo(
+				"couldn't flush writer to %s: %s",
+				p.id, err,
+			)
+			return
+		}
+
+		msg, ok = p.messageQueue.Pop()
 		if !ok {
-			// Make sure the peer was fully sent all prior messages before
-			// blocking.
-			if err := writer.Flush(); err != nil {
-				p.Log.Verbo(
-					"couldn't flush writer to %s: %s",
-					p.id, err,
-				)
-				return
-			}
-			msg, ok = p.messageQueue.Pop()
-			if !ok {
-				// This peer is closing
-				return
-			}
+			// This peer is closing
+			return
 		}
 
 		p.writeMessage(writer, msg)

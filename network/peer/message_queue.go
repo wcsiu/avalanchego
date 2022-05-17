@@ -47,7 +47,8 @@ type MessageQueue interface {
 }
 
 type throttledMessageQueue struct {
-	onFailed             SendFailedCallback
+	onFailed SendFailedCallback
+	// [id] of the peer we're sending messages to
 	id                   ids.NodeID
 	log                  logging.Logger
 	outboundMsgThrottler throttling.OutboundMsgThrottler
@@ -57,9 +58,11 @@ type throttledMessageQueue struct {
 	cond *sync.Cond
 
 	// closed flags whether the send queue has been closed.
+	// [cond.L] must be held while accessing [closed].
 	closed bool
 
 	// queue of the messages
+	// [cond.L] must be held while accessing [queue].
 	queue []message.OutboundMessage
 }
 
@@ -99,8 +102,9 @@ func (q *throttledMessageQueue) Push(ctx context.Context, msg message.OutboundMe
 		return false
 	}
 
-	// Invariant: must call p.outboundMsgThrottler.Release(msg, p.id) when done
-	// sending [msg] or when we give up sending [msg].
+	// Invariant: must call q.outboundMsgThrottler.Release(msg, q.id) when [msg]
+	// is popped or, if this queue closes before [msg] is popped, when this
+	// queue closes.
 
 	q.cond.L.Lock()
 	defer q.cond.L.Unlock()
@@ -203,22 +207,21 @@ func NewBlockingMessageQueue(
 }
 
 func (q *blockingMessageQueue) Push(ctx context.Context, msg message.OutboundMessage) bool {
-	if err := ctx.Err(); err != nil {
-		q.log.Debug(
-			"dropping %s message due to a context error: %s",
-			msg.Op(), err,
-		)
-		q.onFailed.SendFailed(msg)
-		return false
-	}
-
 	q.closingLock.RLock()
 	defer q.closingLock.RUnlock()
 
+	ctxDone := ctx.Done()
 	select {
 	case <-q.closing:
 		q.log.Debug(
 			"dropping %s message due to a closed queue",
+			msg.Op(),
+		)
+		q.onFailed.SendFailed(msg)
+		return false
+	case <-ctxDone:
+		q.log.Debug(
+			"dropping %s message due to a cancelled context",
 			msg.Op(),
 		)
 		q.onFailed.SendFailed(msg)
@@ -229,7 +232,7 @@ func (q *blockingMessageQueue) Push(ctx context.Context, msg message.OutboundMes
 	select {
 	case q.queue <- msg:
 		return true
-	case <-ctx.Done():
+	case <-ctxDone:
 		q.log.Debug(
 			"dropping %s message due to a cancelled context",
 			msg.Op(),
