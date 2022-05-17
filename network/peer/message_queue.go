@@ -107,7 +107,7 @@ func (q *throttledMessageQueue) Push(ctx context.Context, msg message.OutboundMe
 
 	if q.closed {
 		q.log.Debug(
-			"dropping %s message to %s due to a closed connection",
+			"dropping %s message to %s due to a closed queue",
 			msg.Op(), q.id,
 		)
 		q.outboundMsgThrottler.Release(msg, q.id)
@@ -218,7 +218,7 @@ func (q *blockingMessageQueue) Push(ctx context.Context, msg message.OutboundMes
 	select {
 	case <-q.closing:
 		q.log.Debug(
-			"dropping %s message due to a closed connection",
+			"dropping %s message due to a closed queue",
 			msg.Op(),
 		)
 		q.onFailed.SendFailed(msg)
@@ -238,7 +238,7 @@ func (q *blockingMessageQueue) Push(ctx context.Context, msg message.OutboundMes
 		return false
 	case <-q.closing:
 		q.log.Debug(
-			"dropping %s message due to a closed connection",
+			"dropping %s message due to a closed queue",
 			msg.Op(),
 		)
 		q.onFailed.SendFailed(msg)
