@@ -18,6 +18,14 @@ var (
 	_ MessageQueue = &blockingMessageQueue{}
 )
 
+type SendFailedCallback interface {
+	SendFailed(message.OutboundMessage)
+}
+
+type SendFailedFunc func(message.OutboundMessage)
+
+func (f SendFailedFunc) SendFailed(msg message.OutboundMessage) { f(msg) }
+
 type MessageQueue interface {
 	Push(ctx context.Context, msg message.OutboundMessage) bool
 	Pop() (message.OutboundMessage, bool)
@@ -26,7 +34,7 @@ type MessageQueue interface {
 }
 
 type throttledMessageQueue struct {
-	metrics              *Metrics
+	onFailed             SendFailedCallback
 	id                   ids.NodeID
 	log                  logging.Logger
 	outboundMsgThrottler throttling.OutboundMsgThrottler
@@ -43,13 +51,13 @@ type throttledMessageQueue struct {
 }
 
 func NewThrottledMessageQueue(
-	metrics *Metrics,
+	onFailed SendFailedCallback,
 	id ids.NodeID,
 	log logging.Logger,
 	outboundMsgThrottler throttling.OutboundMsgThrottler,
 ) MessageQueue {
 	return &throttledMessageQueue{
-		metrics:              metrics,
+		onFailed:             onFailed,
 		id:                   id,
 		log:                  log,
 		outboundMsgThrottler: outboundMsgThrottler,
@@ -65,7 +73,7 @@ func (q *throttledMessageQueue) Push(_ context.Context, msg message.OutboundMess
 			"dropping %s message to %s due to rate-limiting",
 			msg.Op(), q.id,
 		)
-		q.metrics.SendFailed(msg)
+		q.onFailed.SendFailed(msg)
 		return false
 	}
 
@@ -81,7 +89,7 @@ func (q *throttledMessageQueue) Push(_ context.Context, msg message.OutboundMess
 			msg.Op(), q.id,
 		)
 		q.outboundMsgThrottler.Release(msg, q.id)
-		q.metrics.SendFailed(msg)
+		q.onFailed.SendFailed(msg)
 		return false
 	}
 
@@ -139,7 +147,7 @@ func (q *throttledMessageQueue) Close() {
 
 	for _, msg := range q.queue {
 		q.outboundMsgThrottler.Release(msg, q.id)
-		q.metrics.SendFailed(msg)
+		q.onFailed.SendFailed(msg)
 	}
 	q.queue = nil
 
@@ -147,8 +155,8 @@ func (q *throttledMessageQueue) Close() {
 }
 
 type blockingMessageQueue struct {
-	metrics *Metrics
-	log     logging.Logger
+	onFailed SendFailedCallback
+	log      logging.Logger
 
 	closeOnce   sync.Once
 	closingLock sync.RWMutex
@@ -159,13 +167,13 @@ type blockingMessageQueue struct {
 }
 
 func NewBlockingMessageQueue(
-	metrics *Metrics,
+	onFailed SendFailedCallback,
 	log logging.Logger,
 	bufferSize int,
 ) MessageQueue {
 	return &blockingMessageQueue{
-		metrics: metrics,
-		log:     log,
+		onFailed: onFailed,
+		log:      log,
 
 		closing: make(chan struct{}),
 		queue:   make(chan message.OutboundMessage, bufferSize),
@@ -182,7 +190,7 @@ func (q *blockingMessageQueue) Push(ctx context.Context, msg message.OutboundMes
 			"dropping %s message due to a closed connection",
 			msg.Op(),
 		)
-		q.metrics.SendFailed(msg)
+		q.onFailed.SendFailed(msg)
 		return false
 	default:
 	}
@@ -195,14 +203,14 @@ func (q *blockingMessageQueue) Push(ctx context.Context, msg message.OutboundMes
 			"dropping %s message due to a cancelled context",
 			msg.Op(),
 		)
-		q.metrics.SendFailed(msg)
+		q.onFailed.SendFailed(msg)
 		return false
 	case <-q.closing:
 		q.log.Debug(
 			"dropping %s message due to a closed connection",
 			msg.Op(),
 		)
-		q.metrics.SendFailed(msg)
+		q.onFailed.SendFailed(msg)
 		return false
 	}
 }
@@ -235,7 +243,7 @@ func (q *blockingMessageQueue) Close() {
 		for {
 			select {
 			case msg := <-q.queue:
-				q.metrics.SendFailed(msg)
+				q.onFailed.SendFailed(msg)
 			default:
 				return
 			}
