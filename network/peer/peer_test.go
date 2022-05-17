@@ -97,7 +97,6 @@ func makeRawTestPeers(t *testing.T) (*rawTestPeer, *rawTestPeer) {
 		MessageCreator:       mc,
 		Log:                  logging.NoLog{},
 		InboundMsgThrottler:  throttling.NewNoInboundThrottler(),
-		OutboundMsgThrottler: throttling.NewNoOutboundThrottler(),
 		VersionCompatibility: version.GetCompatibility(constants.LocalID),
 		VersionParser:        version.DefaultApplicationParser,
 		MySubnets:            ids.Set{},
@@ -176,6 +175,12 @@ func makeTestPeers(t *testing.T) (*testPeer, *testPeer) {
 			rawPeer0.conn,
 			rawPeer1.cert,
 			rawPeer1.nodeID,
+			NewThrottledMessageQueue(
+				rawPeer0.config.Metrics,
+				rawPeer1.nodeID,
+				logging.NoLog{},
+				throttling.NewNoOutboundThrottler(),
+			),
 		),
 		inboundMsgChan: rawPeer0.inboundMsgChan,
 	}
@@ -185,6 +190,12 @@ func makeTestPeers(t *testing.T) (*testPeer, *testPeer) {
 			rawPeer1.conn,
 			rawPeer0.cert,
 			rawPeer0.nodeID,
+			NewThrottledMessageQueue(
+				rawPeer1.config.Metrics,
+				rawPeer0.nodeID,
+				logging.NoLog{},
+				throttling.NewNoOutboundThrottler(),
+			),
 		),
 		inboundMsgChan: rawPeer1.inboundMsgChan,
 	}
@@ -220,6 +231,12 @@ func TestReady(t *testing.T) {
 		rawPeer0.conn,
 		rawPeer1.cert,
 		rawPeer1.nodeID,
+		NewThrottledMessageQueue(
+			rawPeer0.config.Metrics,
+			rawPeer1.nodeID,
+			logging.NoLog{},
+			throttling.NewNoOutboundThrottler(),
+		),
 	)
 
 	isReady := peer0.Ready()
@@ -230,6 +247,12 @@ func TestReady(t *testing.T) {
 		rawPeer1.conn,
 		rawPeer0.cert,
 		rawPeer0.nodeID,
+		NewThrottledMessageQueue(
+			rawPeer1.config.Metrics,
+			rawPeer0.nodeID,
+			logging.NoLog{},
+			throttling.NewNoOutboundThrottler(),
+		),
 	)
 
 	err := peer0.AwaitReady(context.Background())
@@ -258,7 +281,7 @@ func TestSend(t *testing.T) {
 	outboundGetMsg, err := mc.Get(ids.Empty, 1, time.Second, ids.Empty)
 	assert.NoError(err)
 
-	sent := peer0.Send(outboundGetMsg)
+	sent := peer0.Send(context.Background(), outboundGetMsg)
 	assert.True(sent)
 
 	inboundGetMsg := <-peer1.inboundMsgChan

@@ -26,6 +26,8 @@ import (
 	"github.com/ava-labs/avalanchego/version"
 )
 
+const maxMessageToSend = 1024
+
 // StartTestPeer provides a simple interface to create a peer that has finished
 // the p2p handshake.
 //
@@ -94,11 +96,10 @@ func StartTestPeer(
 	}
 	peer := Start(
 		&Config{
-			Metrics:              metrics,
-			MessageCreator:       mc,
-			Log:                  logging.NoLog{},
-			InboundMsgThrottler:  throttling.NewNoInboundThrottler(),
-			OutboundMsgThrottler: throttling.NewNoOutboundThrottler(),
+			Metrics:             metrics,
+			MessageCreator:      mc,
+			Log:                 logging.NoLog{},
+			InboundMsgThrottler: throttling.NewNoInboundThrottler(),
 			Network: NewTestNetwork(
 				mc,
 				networkID,
@@ -122,6 +123,11 @@ func StartTestPeer(
 		conn,
 		cert,
 		peerID,
+		NewBlockingMessageQueue(
+			metrics,
+			logging.NoLog{},
+			maxMessageToSend,
+		),
 	)
 	return peer, peer.AwaitReady(ctx)
 }
