@@ -94,6 +94,19 @@ func StartTestPeer(
 	if err != nil {
 		return nil, err
 	}
+	cpuTargeter, err := tracker.NewCPUTargeter(
+		prometheus.NewRegistry(),
+		&tracker.CPUTargeterConfig{
+			VdrCPUAlloc:           10000,
+			AtLargeCPUAlloc:       10000,
+			PeerMaxAtLargePortion: 10000,
+		},
+		validators.NewSet(),
+		cpuTracker,
+	)
+	if err != nil {
+		return nil, err
+	}
 	peer := Start(
 		&Config{
 			Metrics:             metrics,
@@ -119,6 +132,7 @@ func StartTestPeer(
 			PongTimeout:          constants.DefaultPingPongTimeout,
 			MaxClockDifference:   time.Minute,
 			CPUTracker:           cpuTracker,
+			CPUTargeter:          cpuTargeter,
 		},
 		conn,
 		cert,
