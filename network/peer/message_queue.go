@@ -27,9 +27,22 @@ type SendFailedFunc func(message.OutboundMessage)
 func (f SendFailedFunc) SendFailed(msg message.OutboundMessage) { f(msg) }
 
 type MessageQueue interface {
+	// Push attempts to add the message to the queue. If the context is
+	// canceled, then pushing the message will return `false` and the message
+	// will not be added to the queue.
 	Push(ctx context.Context, msg message.OutboundMessage) bool
+
+	// Pop blocks until a message is available and then returns the message. If
+	// the queue is closed, then `false` is returned.
 	Pop() (message.OutboundMessage, bool)
+
+	// PopWithoutBlocking attempts to return a message without blocking. If a
+	// message is not available or the queue is closed, then `false` is
+	// returned.
 	PopWithoutBlocking() (message.OutboundMessage, bool)
+
+	// Close empties the queue and prevents further messages from being pushed
+	// onto it. After calling close once, future calls to close will do nothing.
 	Close()
 }
 
@@ -66,7 +79,16 @@ func NewThrottledMessageQueue(
 	}
 }
 
-func (q *throttledMessageQueue) Push(_ context.Context, msg message.OutboundMessage) bool {
+func (q *throttledMessageQueue) Push(ctx context.Context, msg message.OutboundMessage) bool {
+	if err := ctx.Err(); err != nil {
+		q.log.Debug(
+			"dropping %s message to %s due to a context error: %s",
+			msg.Op(), q.id, err,
+		)
+		q.onFailed.SendFailed(msg)
+		return false
+	}
+
 	// Acquire space on the outbound message queue, or drop [msg] if we can't.
 	if !q.outboundMsgThrottler.Acquire(msg, q.id) {
 		q.log.Debug(
@@ -181,6 +203,15 @@ func NewBlockingMessageQueue(
 }
 
 func (q *blockingMessageQueue) Push(ctx context.Context, msg message.OutboundMessage) bool {
+	if err := ctx.Err(); err != nil {
+		q.log.Debug(
+			"dropping %s message due to a context error: %s",
+			msg.Op(), err,
+		)
+		q.onFailed.SendFailed(msg)
+		return false
+	}
+
 	q.closingLock.RLock()
 	defer q.closingLock.RUnlock()
 
