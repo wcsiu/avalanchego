@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"strings"
 
-	_ "github.com/btcsuite/btcd" // TODO: remove when upstream btcd/btcutil package is updated.
 	"github.com/btcsuite/btcd/btcutil/bech32"
 )
 
