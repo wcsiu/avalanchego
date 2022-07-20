@@ -147,6 +147,23 @@ After a block has been marked as Accepted, it should report its status as accept
 
 After a block has been marked as Rejected, it should report its status as rejected.
 
+### Uniquifying Blocks
+
+The consensus engine requires that the VM return a unique reference to blocks when they are in consensus.
+
+To repeat, from the perspective of the VM, a block is in consensus if `Verify()` has been called on it and it returned an error, but the block has not yet been decided. In other words, `Verify()` has been called, but this has not yet been followed by `Accept()` or `Reject()`.
+
+When a block is in processing, the VM needs to ensure that any function on the VM that gets called and returns a block, returns a unique reference to that same block that the consensus engine already has.
+
+After a block has been decided, the consensus engine will not call `Verify()`, `Accept()`, or `Reject()` on the same block again. Since the block will not go through consensus again, it's safe to return a non-unique block if that block has already been decided.
+
+If a block is in processing, but has not been verified yet, such that it has not been added to consensus, then it is also safe to return a non-unique block.
+
+Once `Verify()` has been called and returns a non-nil error, the VM must subsequently return a reference to the same block.
+
+This means that the VM needs to handle uniqufication and leads to very specific requirements for how blocks are cached. This is why the (chain)[https://github.com/ava-labs/avalanchego/tree/master/vms/components/chain] package was implemented to create a simple helper that helps a VM implement an efficient caching layer while correctly uniquifying blocks. For an example of how it's used, you can look at the (rpcchainvm)[https://github.com/ava-labs/avalanchego/tree/master/vms/rpcchainvm].
+
+
 ## Snowman VM APIs
 
 The VM must also implement `CreateHandlers()` which can return a map of extensions mapped to HTTP handlers that will be added to the node's API server. This allows the VM to expose APIs for querying and interacting with the blockchain implemented by the API.
