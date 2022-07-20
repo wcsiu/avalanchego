@@ -14,7 +14,7 @@ The last piece of the puzzle is VMs. A VM is to a blockchain what a class is to 
 
 The VM defines the blockchain's state machine logic. Its primary responsibility is to expose all of the required block handling logic to the consensus engine.
 
-The VM handles building blocks, parsing blocks received from the network, and retrieving blocks from storage. The blocks that it returns follow the (snowman.Block)[https://github.com/ava-labs/avalanchego/blob/master/snow/consensus/snowman/block.go] interface and maintain all of the invariants required by the consensus engine.
+The VM handles building blocks, parsing blocks received from the network, and retrieving blocks from storage. The blocks that it returns follow the [snowman.Block](https://github.com/ava-labs/avalanchego/blob/master/snow/consensus/snowman/block.go) interface and maintain all of the invariants required by the consensus engine.
 
 
 ## Snowman VM From the Perspective of the Consensus Engine
@@ -63,6 +63,7 @@ block as the root.
 
 In practice, this looks like the following:
 
+```
     G
     |
     .
@@ -74,6 +75,7 @@ In practice, this looks like the following:
     B
   /   \
  C     D
+```
 
 In this example, G -> ... -> A is the linear chain of blocks that have already been accepted by the consensus
 engine.
@@ -99,6 +101,7 @@ the following steps:
 
 Therefore, if the tree of blocks in consensus (with root L, the last accepted block), looks like the following:
 
+```
       L
      / \
     A   B
@@ -107,6 +110,7 @@ Therefore, if the tree of blocks in consensus (with root L, the last accepted bl
         D  G
        / \
       E   F
+```
 
 If the consensus engine decides A and C simultaneously, the consensus engine would perform the following ordered
 operations:
@@ -161,7 +165,7 @@ If a block is in processing, but has not been verified yet, such that it has not
 
 Once `Verify()` has been called and returns a non-nil error, the VM must subsequently return a reference to the same block.
 
-This means that the VM needs to handle uniqufication and leads to very specific requirements for how blocks are cached. This is why the (chain)[https://github.com/ava-labs/avalanchego/tree/master/vms/components/chain] package was implemented to create a simple helper that helps a VM implement an efficient caching layer while correctly uniquifying blocks. For an example of how it's used, you can look at the (rpcchainvm)[https://github.com/ava-labs/avalanchego/tree/master/vms/rpcchainvm].
+This means that the VM needs to handle uniqufication and leads to very specific requirements for how blocks are cached. This is why the [chain](https://github.com/ava-labs/avalanchego/tree/master/vms/components/chain) package was implemented to create a simple helper that helps a VM implement an efficient caching layer while correctly uniquifying blocks. For an example of how it's used, you can look at the (rpcchainvm)[https://github.com/ava-labs/avalanchego/tree/master/vms/rpcchainvm].
 
 
 ## Snowman VM APIs
