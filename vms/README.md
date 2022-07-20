@@ -165,7 +165,7 @@ If a block is in processing, but has not been verified yet, such that it has not
 
 Once `Verify()` has been called and returns a non-nil error, the VM must subsequently return a reference to the same block.
 
-This means that the VM needs to handle uniqufication and leads to very specific requirements for how blocks are cached. This is why the [chain](https://github.com/ava-labs/avalanchego/tree/master/vms/components/chain) package was implemented to create a simple helper that helps a VM implement an efficient caching layer while correctly uniquifying blocks. For an example of how it's used, you can look at the (rpcchainvm)[https://github.com/ava-labs/avalanchego/tree/master/vms/rpcchainvm].
+This means that the VM needs to handle uniqufication and leads to very specific requirements for how blocks are cached. This is why the [chain](https://github.com/ava-labs/avalanchego/tree/master/vms/components/chain) package was implemented to create a simple helper that helps a VM implement an efficient caching layer while correctly uniquifying blocks. For an example of how it's used, you can look at the [rpcchainvm](https://github.com/ava-labs/avalanchego/tree/master/vms/rpcchainvm).
 
 
 ## Snowman VM APIs
